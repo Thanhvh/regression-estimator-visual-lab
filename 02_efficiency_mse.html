@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Efficiency, the bias–variance grid, and MSE</title>
+<style>
+/* ===================================================================== */
+/* COLOR PALETTE — colorblind-friendly (Okabe–Ito).                       */
+/*  Estimator A (Full-sample OLS) = deep blue ; Estimator B = orange.     */
+/*  true β₁ (fixed truth) = black. Used consistently for histograms,      */
+/*  mean lines, and the MSE bars (spec 1.1).                              */
+/* ===================================================================== */
+:root{
+  --estA:#0072B2;       /* A — Full-sample OLS (blue) */
+  --estB:#E69F00;       /* B — Estimator B (orange) */
+  --truth:#111111;      /* true β₁ (black) */
+  --bias:#444;          /* Bias² segment texture (dark) */
+  --bg:#f7f8fa; --panel:#ffffff; --ink:#1d2733; --muted:#5b6876;
+  --line:#dde3ea; --accent:#0b5cad;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  font-family:"Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;
+  background:var(--bg); color:var(--ink); line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+}
+.app{max-width:1340px;margin:0 auto;padding:18px 20px 60px}
+header.top{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;border-bottom:2px solid var(--line);padding-bottom:12px}
+header.top h1{font-size:1.4rem;margin:0;font-weight:700;letter-spacing:.2px}
+header.top .sub{color:var(--muted);font-size:.9rem;margin-top:2px}
+header.top a.home{color:var(--accent);text-decoration:none;font-size:.85rem;font-weight:600}
+header.top a.home:hover{text-decoration:underline}
+.toggle-row{display:flex;gap:10px;align-items:center}
+
+button{font:inherit;font-weight:600;cursor:pointer;border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:9px;padding:9px 14px;transition:.12s}
+button:hover{border-color:#b9c4d0;background:#f2f6fb}
+button:active{transform:translateY(1px)}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button.primary:hover{background:#0a4f95}
+button:disabled{opacity:.5;cursor:not-allowed}
+button.ghost{background:transparent}
+
+.switch{display:inline-flex;align-items:center;gap:8px;cursor:pointer;user-select:none;font-weight:600;font-size:.92rem}
+.switch input{position:absolute;opacity:0;width:0;height:0}
+.switch .track{width:42px;height:24px;background:#cfd8e2;border-radius:14px;position:relative;transition:.15s}
+.switch .track::after{content:"";position:absolute;width:18px;height:18px;background:#fff;border-radius:50%;top:3px;left:3px;transition:.15s;box-shadow:0 1px 2px rgba(0,0,0,.25)}
+.switch input:checked + .track{background:var(--accent)}
+.switch input:checked + .track::after{left:21px}
+
+.controls{display:grid;grid-template-columns:repeat(4,minmax(190px,1fr));gap:14px 22px;align-items:end;margin:16px 0 8px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+.ctrl label{display:block;font-weight:600;font-size:.9rem;margin-bottom:4px}
+.ctrl .val{color:var(--accent);font-variant-numeric:tabular-nums}
+.ctrl input[type=range]{width:100%}
+.ctrl.estB input[type=range]{accent-color:var(--estB)}
+.ctrl input[type=range]{accent-color:var(--accent)}
+.ctrl .hint{color:var(--muted);font-size:.78rem;margin-top:2px}
+.buttons{grid-column:1 / -1;display:flex;gap:10px;flex-wrap:wrap;align-items:center;border-top:1px dashed var(--line);padding-top:12px}
+.advanced{grid-column:1 / -1;border-top:1px dashed var(--line);padding-top:10px}
+.advanced summary{cursor:pointer;font-weight:600;font-size:.9rem;color:var(--muted)}
+.advanced .adv-body{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:10px}
+.advanced input[type=number]{font:inherit;padding:7px 9px;border:1px solid var(--line);border-radius:8px;width:130px}
+
+.stage{display:grid;grid-template-columns:1.7fr 1fr;gap:16px;margin-top:14px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px;min-width:0}
+.panel h2{font-size:1.0rem;margin:0 0 2px;display:flex;align-items:center;gap:8px}
+.panel .desc{color:var(--muted);font-size:.83rem;margin:2px 0 10px}
+.panel.full{grid-column:1 / -1}
+.tag{font-size:.7rem;font-weight:700;letter-spacing:.5px;padding:2px 8px;border-radius:20px;background:#eef3f8;color:var(--accent);text-transform:uppercase}
+svg{display:block;width:100%;height:auto;overflow:visible}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:.8rem;color:var(--muted);margin-top:8px}
+.legend .it{display:inline-flex;align-items:center;gap:6px}
+.legend .sw{width:16px;height:12px;border-radius:3px;display:inline-block;border:1px solid rgba(0,0,0,.15)}
+.legend .ln{width:16px;height:0;border-top-width:3px;border-top-style:solid;display:inline-block}
+
+/* ---- 2×2 grid (panel B) ---- */
+.grid2{display:grid;grid-template-columns:auto 1fr 1fr;grid-template-rows:auto auto auto;gap:6px;margin-top:6px;font-size:.82rem}
+.grid2 .hd{font-weight:700;color:var(--muted);display:flex;align-items:center;justify-content:center;text-align:center;padding:4px}
+.grid2 .rl{font-weight:700;color:var(--muted);writing-mode:vertical-rl;transform:rotate(180deg);display:flex;align-items:center;justify-content:center;padding:2px}
+.cell{border:1px solid var(--line);border-radius:9px;min-height:58px;padding:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;background:#fbfcfe;text-align:center;color:var(--muted)}
+.cell.active{border-color:var(--accent);background:#eef5fc;box-shadow:0 0 0 2px rgba(11,92,173,.15)}
+.mark{display:inline-flex;width:24px;height:24px;border-radius:50%;color:#fff;font-weight:800;font-size:.8rem;align-items:center;justify-content:center}
+.mark.a{background:var(--estA)} .mark.b{background:var(--estB)}
+.note{margin-top:12px;font-size:.82rem;background:#f1f4f8;border-left:4px solid var(--accent);padding:9px 12px;border-radius:8px;color:var(--ink)}
+.bstate{font-size:.95rem;font-weight:700;margin-top:4px}
+
+/* ---- MSE clock (panel C) ---- */
+.msetbl{width:100%;border-collapse:collapse;font-size:.86rem;margin-top:6px}
+.msetbl th,.msetbl td{padding:5px 8px;border-bottom:1px solid var(--line);text-align:right;font-variant-numeric:tabular-nums}
+.msetbl th:first-child,.msetbl td:first-child{text-align:left;color:var(--muted);font-weight:600}
+.msetbl thead th{font-size:.75rem;text-transform:uppercase;letter-spacing:.3px;color:var(--muted)}
+.colA{color:var(--estA);font-weight:700} .colB{color:var(--estB);font-weight:700}
+.re-line{margin-top:10px;font-size:.9rem;display:grid;gap:3px}
+.re-line b{font-variant-numeric:tabular-nums}
+
+.statbar{display:flex;gap:22px;flex-wrap:wrap;margin-top:8px;font-size:.92rem}
+.statbar .k{color:var(--muted);font-weight:600;margin-right:6px;font-size:.82rem}
+.statbar b{font-variant-numeric:tabular-nums}
+
+.messages{margin-top:16px;display:grid;gap:10px}
+.msg{padding:11px 15px;border-radius:11px;border-left:5px solid var(--accent);background:#eef5fc;font-size:.94rem}
+.msg.fixed{border-left-color:var(--truth);background:#f1f1f2}
+.msg.bias{border-left-color:var(--estB);background:#fff4e2}
+.msg.var{border-left-color:var(--estA);background:#eaf4fb}
+.msg.hidden{display:none}
+.msg b{font-variant-numeric:tabular-nums}
+
+.verify{margin-top:18px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+.verify h2{margin:0 0 4px;font-size:1.05rem}
+.verify .desc{color:var(--muted);font-size:.84rem;margin-bottom:10px}
+table.vtbl{border-collapse:collapse;width:100%;font-size:.93rem}
+table.vtbl th,table.vtbl td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line)}
+table.vtbl th{background:#f3f6fa;font-size:.8rem;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)}
+table.vtbl td.num{font-variant-numeric:tabular-nums;text-align:right}
+.pass{color:#009E73;font-weight:800}
+.fail{color:#c0392b;font-weight:800}
+.verify .summary{margin-top:10px;font-weight:700}
+
+footer{margin-top:30px;color:var(--muted);font-size:.8rem;text-align:center;border-top:1px solid var(--line);padding-top:14px}
+
+body.present{font-size:1.16rem}
+body.present .desc{display:none}
+body.present .advanced{display:none}
+body.present .hint{display:none}
+body.present .panel h2{font-size:1.2rem}
+
+@media (max-width:900px){
+  .stage{grid-template-columns:1fr}
+  .controls{grid-template-columns:1fr 1fr}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header class="top">
+    <div>
+      <h1>Lesson 2 — Efficiency, the bias–variance grid, and MSE</h1>
+      <div class="sub" id="subtitle"></div>
+    </div>
+    <div class="toggle-row">
+      <a class="home" href="index.html">← All lessons</a>
+      <label class="switch"><input type="checkbox" id="presentMode"><span class="track"></span>Presentation mode</label>
+    </div>
+  </header>
+
+  <!-- ===================== CONTROLS ===================== -->
+  <section class="controls">
+    <div class="ctrl estB">
+      <label>B bias offset <b>δ</b> = <span class="val" id="deltaVal">0.000</span></label>
+      <input type="range" id="delta" min="-0.5" max="0.5" step="0.05" value="0">
+      <div class="hint">Deliberate offset added to <b style="color:var(--estB)">B</b> (illustrative bias, −0.5 … 0.5)</div>
+    </div>
+    <div class="ctrl estB">
+      <label>B subsample size <b>m</b> = <span class="val" id="mVal">30</span></label>
+      <input type="range" id="mSize" min="10" max="30" step="1" value="30">
+      <div class="hint"><b style="color:var(--estB)">B</b> uses the first m of n obs (10 … n)</div>
+    </div>
+    <div class="ctrl">
+      <label>Sample size <b>n</b> = <span class="val" id="nVal">30</span></label>
+      <input type="range" id="nSize" min="10" max="500" step="1" value="30">
+      <div class="hint">Observations per sample (10 … 500)</div>
+    </div>
+    <div class="ctrl">
+      <label>Noise <b>σ<sub>ε</sub></b> = <span class="val" id="sigVal">1.000</span></label>
+      <input type="range" id="sigEps" min="0.2" max="5" step="0.1" value="1">
+      <div class="hint">Std. dev. of the population error ε (0.2 … 5)</div>
+    </div>
+
+    <div class="buttons">
+      <button class="primary" id="drawOne">Draw one sample</button>
+      <button id="draw500">Draw 500</button>
+      <button id="resetBtn" class="ghost">Reset</button>
+      <button id="verifyBtn">Run verification (20,000)</button>
+    </div>
+
+    <details class="advanced">
+      <summary>Advanced options</summary>
+      <div class="adv-body">
+        <label>seed: <input type="number" id="seedInput" value="12345" step="1"></label>
+        <button id="seedDefault">Default seed</button>
+        <button id="seedRandom">Random seed</button>
+        <span class="hint">Same seed + same parameters ⇒ same result (reproducible).</span>
+      </div>
+    </details>
+  </section>
+
+  <!-- ===================== STAGE ===================== -->
+  <section class="stage">
+
+    <!-- (A) Overlaid distributions -->
+    <div class="panel" id="panelA">
+      <h2><span class="tag">A · Distributions</span> Sampling distributions of b₁(A) and b₁(B)</h2>
+      <div class="desc">Both histograms share one <b>fixed b₁ axis</b>, the same bins and the same normalization (density), drawn semi-transparent so both stay visible.
+        A narrow distribution is tall, a wide one is short — that width <i>is</i> the precision/variance.</div>
+      <svg id="svgHist" viewBox="0 0 660 340" role="img" aria-label="Overlaid sampling distributions of the two estimators"></svg>
+      <div class="legend">
+        <span class="it"><span class="sw" style="background:var(--estA);opacity:.5"></span>b₁(A) — Full-sample OLS</span>
+        <span class="it"><span class="sw" style="background:var(--estB);opacity:.5"></span>b₁(B) — Estimator B</span>
+        <span class="it"><span class="ln" style="border-top-color:var(--truth);border-top-style:dashed"></span>true β₁</span>
+      </div>
+      <div class="statbar">
+        <span><span class="k">Draws</span><b id="stCount">0</b></span>
+        <span><span class="k">mean b₁(A)</span><b class="colA" id="stMeanA">—</b></span>
+        <span><span class="k">mean b₁(B)</span><b class="colB" id="stMeanB">—</b></span>
+        <span><span class="k">true β₁</span><b id="stBeta">0.500</b></span>
+      </div>
+    </div>
+
+    <!-- (C) MSE clock -->
+    <div class="panel" id="panelC">
+      <h2><span class="tag">C · MSE clock</span> Var + Bias² = MSE</h2>
+      <div class="desc">Each estimator is one stacked bar: <b>Var</b> (solid) + <b>Bias²</b> (hatched). The Y scale is <b>fixed</b> (no autoscale), so the bars grow as you make B worse.</div>
+      <svg id="svgMSE" viewBox="0 0 340 250" role="img" aria-label="MSE decomposition bars"></svg>
+      <div class="legend">
+        <span class="it"><span class="sw" style="background:var(--estA);opacity:.85"></span>A Var</span>
+        <span class="it"><span class="sw" style="background:var(--estB);opacity:.85"></span>B Var</span>
+        <span class="it"><span class="sw" style="background:#777"></span>Bias² (hatched)</span>
+      </div>
+      <table class="msetbl">
+        <thead><tr><th></th><th class="colA">A (theory)</th><th class="colB">B (theory)</th></tr></thead>
+        <tbody>
+          <tr><td>Var</td><td id="mVarA">—</td><td id="mVarB">—</td></tr>
+          <tr><td>Bias²</td><td id="mBiasA">—</td><td id="mBiasB">—</td></tr>
+          <tr><td>MSE</td><td id="mMseA">—</td><td id="mMseB">—</td></tr>
+          <tr><td>RMSE</td><td id="mRmseA">—</td><td id="mRmseB">—</td></tr>
+        </tbody>
+      </table>
+      <div class="re-line">
+        <span>Relative efficiency (Var<sub>A</sub>/Var<sub>B</sub>): <b id="reVar">—</b></span>
+        <span>Relative efficiency (MSE<sub>A</sub>/MSE<sub>B</sub>): <b id="reMse">—</b></span>
+        <span style="color:var(--muted);font-size:.82rem">Empirical MSE after <b id="reCount">0</b> draws — A: <b id="empMseA">—</b>, B: <b id="empMseB">—</b></span>
+      </div>
+    </div>
+
+    <!-- (B) 2x2 grid + terminology -->
+    <div class="panel full" id="panelB">
+      <h2><span class="tag">B · Bias–variance grid</span> Where does Estimator B sit?</h2>
+      <div class="bstate" id="bState">Estimator B: —</div>
+      <div class="grid2" id="grid2">
+        <div class="hd" style="grid-row:1;grid-column:1"></div>
+        <div class="hd" style="grid-row:1;grid-column:2">Unbiased<br><span style="font-weight:400;font-size:.82em">(centered on β₁)</span></div>
+        <div class="hd" style="grid-row:1;grid-column:3">Biased<br><span style="font-weight:400;font-size:.82em">(center ≠ β₁)</span></div>
+        <div class="rl" style="grid-row:2;grid-column:1">Low variance</div>
+        <div class="cell" id="c_unb_low" style="grid-row:2;grid-column:2"></div>
+        <div class="cell" id="c_bia_low" style="grid-row:2;grid-column:3"></div>
+        <div class="rl" style="grid-row:3;grid-column:1">High variance</div>
+        <div class="cell" id="c_unb_high" style="grid-row:3;grid-column:2"></div>
+        <div class="cell" id="c_bia_high" style="grid-row:3;grid-column:3"></div>
+      </div>
+      <div class="note">Efficiency (Gauss–Markov) is defined <b>among unbiased estimators</b>: the efficient one has the smallest variance (BLUE). For biased estimators, compare variance or MSE instead. The dispersion axis here is <b>precision / variance</b>.</div>
+    </div>
+  </section>
+
+  <!-- ===================== MESSAGES ===================== -->
+  <section class="messages">
+    <div class="msg fixed" id="msgFixed"></div>
+    <div class="msg var hidden" id="msgVar"></div>
+    <div class="msg bias hidden" id="msgBias"></div>
+  </section>
+
+  <!-- ===================== VERIFICATION ===================== -->
+  <section class="verify">
+    <h2>Verification panel (safety net)</h2>
+    <div class="desc">Runs <b>R = 20,000</b> samples with the current δ, m, n, σ_ε and compares empirical vs theoretical (spec 3.3) for both estimators. “Pass” threshold: relative deviation ≤ 3%.</div>
+    <table class="vtbl">
+      <thead><tr><th>Quantity</th><th class="num">Empirical</th><th class="num">Theoretical</th><th class="num">Deviation</th><th>Pass?</th></tr></thead>
+      <tbody id="verifyBody">
+        <tr><td>Mean b₁(A)</td><td class="num">—</td><td class="num">β₁</td><td class="num">—</td><td>—</td></tr>
+        <tr><td>SD b₁(A)</td><td class="num">—</td><td class="num">σ_ε/(σ_x·√(n−3))</td><td class="num">—</td><td>—</td></tr>
+        <tr><td>Mean b₁(B)</td><td class="num">—</td><td class="num">β₁ + δ</td><td class="num">—</td><td>—</td></tr>
+        <tr><td>SD b₁(B)</td><td class="num">—</td><td class="num">σ_ε/(σ_x·√(m−3))</td><td class="num">—</td><td>—</td></tr>
+        <tr><td>MSE identity (B)</td><td class="num">—</td><td class="num">Var + Bias²</td><td class="num">—</td><td>—</td></tr>
+        <tr><td>MSE b₁(B)</td><td class="num">—</td><td class="num">σ_ε²/(σ_x²(m−3)) + δ²</td><td class="num">—</td><td>—</td></tr>
+        <tr><td>Relative efficiency</td><td class="num">—</td><td class="num">(m−3)/(n−3)</td><td class="num">—</td><td>—</td></tr>
+      </tbody>
+    </table>
+    <div class="summary" id="verifySummary"></div>
+  </section>
+
+  <footer>
+    Regression Estimator Visual Lab · Lesson 2 — Efficiency, the bias–variance grid, and MSE ·
+    Self-contained, runs offline (file://). Numbers: 3 decimals, dot. Core build (animation, regression-beam and shrinkage layers come later).
+  </footer>
+</div>
+
+<script>
+"use strict";
+/* =====================================================================
+   TERMINOLOGY — single source of truth for symbols & labels (spec 1.1).
+   ε = population error ; e = sample residual ; β = parameter ; b = estimate.
+   A = "Full-sample OLS" ; B = "Estimator B". Do NOT use u for the error.
+   ===================================================================== */
+const TERMINOLOGY = {
+  estimatorA: "Full-sample OLS",
+  estimatorB: "Estimator B",
+  msgFixed: "Efficiency is a comparison: the narrower sampling distribution has the smaller variance. " +
+            "Efficiency (Gauss–Markov) is defined only among unbiased estimators.",
+  msgVarTpl: (m, n) =>
+    `Estimator B uses only <b>m = ${m}</b> of <b>n = ${n}</b> observations, so it has a larger sampling ` +
+    `variance than full-sample OLS — it throws away information.`,
+  msgBiasTpl: (delta) =>
+    `Estimator B is biased: its center sits <b>δ = ${delta}</b> away from the true β₁ — ` +
+    `drawing more samples will not remove this.`,
+  msgEfficient: "δ = 0 and m = n: Estimator B coincides with full-sample OLS — unbiased and minimum-variance (efficient), RE = 1.",
+};
+
+const fmt3 = v => (Number.isFinite(v) ? v.toFixed(3) : "—");
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+/* =====================================================================
+   RNG — seeded PRNG (mulberry32) + randn (Box–Muller). No Math.random().
+   COPIED VERBATIM from 01_sampling_distribution_unbiasedness.html.
+   ===================================================================== */
+function makeRNG(seed){
+  let a = seed >>> 0;
+  function rand(){
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  }
+  function randn(){
+    let u1 = 0, u2 = 0;
+    while (u1 === 0) u1 = rand();
+    u2 = rand();
+    return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+  }
+  return { rand, randn };
+}
+
+/* =====================================================================
+   DGP — data-generating process. COPIED VERBATIM from Lesson 1.
+   Lesson 2 always passes rho=0 ⇒ εᵢ ~ Normal(0, σ_ε²) (exogenous core).
+   ===================================================================== */
+function makeSample(p, rng){
+  const { n, mu_x, sigma_x, beta0, beta1, sigma_eps, rho } = p;
+  const x = new Float64Array(n), y = new Float64Array(n), eps = new Float64Array(n);
+  const c = Math.sqrt(1 - rho * rho);
+  for (let i = 0; i < n; i++){
+    const xi = mu_x + sigma_x * rng.randn();
+    const zi = rng.randn();
+    const ei = rho * ((xi - mu_x) / sigma_x) * sigma_eps + c * sigma_eps * zi;
+    x[i] = xi; eps[i] = ei; y[i] = beta0 + beta1 * xi + ei;
+  }
+  return { x, y, eps };
+}
+
+/* =====================================================================
+   OLS — simple regression. COPIED VERBATIM from Lesson 1.
+   ===================================================================== */
+function fitOLS(x, y){
+  const n = x.length;
+  let sx = 0, sy = 0;
+  for (let i = 0; i < n; i++){ sx += x[i]; sy += y[i]; }
+  const xbar = sx / n, ybar = sy / n;
+  let sxx = 0, sxy = 0;
+  for (let i = 0; i < n; i++){
+    const dx = x[i] - xbar;
+    sxx += dx * dx; sxy += dx * (y[i] - ybar);
+  }
+  const b1 = sxy / sxx;
+  const b0 = ybar - b1 * xbar;
+  return { b0, b1, xbar, ybar };
+}
+
+/* =====================================================================
+   ESTIMATORS (spec 3.2 / 10) — two estimators on the SAME sample.
+   A = OLS on all n observations (unbiased baseline, BLUE).
+   B = OLS on the first m observations, plus a fixed offset δ.
+   ===================================================================== */
+const estimatorA = (s) => fitOLS(s.x, s.y).b1;
+const estimatorB = (s, m, delta) => fitOLS(s.x.slice(0, m), s.y.slice(0, m)).b1 + delta;
+
+/* =====================================================================
+   MSE block (spec 10) — population moments so MSE = Var + Bias² is exact.
+   ===================================================================== */
+function summarize(arr, beta1){
+  const R = arr.length;
+  if (R === 0) return { n: 0, mean: NaN, varr: NaN, bias: NaN, mse: NaN, rmse: NaN, sd: NaN };
+  let s = 0; for (let i = 0; i < R; i++) s += arr[i];
+  const mean = s / R;
+  let v = 0, mseDirect = 0;
+  for (let i = 0; i < R; i++){
+    const d = arr[i] - mean; v += d * d;
+    const e = arr[i] - beta1; mseDirect += e * e;
+  }
+  const varr = v / R, bias = mean - beta1, mse = varr + bias * bias;
+  return { n: R, mean, varr, bias, mse, mseDirect: mseDirect / R, rmse: Math.sqrt(mse), sd: Math.sqrt(varr) };
+}
+const relEff    = (varA, varB) => varA / varB;
+const relEffMSE = (mseA, mseB) => mseA / mseB;
+
+/* Theoretical reference values (spec 3.3). */
+const thVarA = p => p.sigma_eps ** 2 / (p.sigma_x ** 2 * (p.n - 3));
+const thVarB = p => p.sigma_eps ** 2 / (p.sigma_x ** 2 * (p.m - 3));
+const thSdA  = p => p.sigma_eps / (p.sigma_x * Math.sqrt(p.n - 3));
+const thSdB  = p => p.sigma_eps / (p.sigma_x * Math.sqrt(p.m - 3));
+
+/* =====================================================================
+   STATE. Fixed params μ_x=5, σ_x=2, β₀=1 (no sliders, spec 3.1).
+   ===================================================================== */
+const FIXED = { mu_x: 5, sigma_x: 2, beta0: 1, beta1: 0.5 };
+const DEFAULT_SEED = 12345;
+const M_MIN = 10;
+const N_BINS = 44;
+
+const state = {
+  delta: 0, m: 30, n: 30, sigma_eps: 1,
+  seed: DEFAULT_SEED, rng: null,
+  aList: [], bList: [],
+  axis: null,       // {lo, hi} fixed b₁ axis
+  mseCeil: 1,       // fixed MSE-bar ceiling
+  animating: false,
+};
+
+/* Effective engine params (rho fixed at 0). */
+function params(){
+  return { n: state.n, m: state.m, mu_x: FIXED.mu_x, sigma_x: FIXED.sigma_x,
+           beta0: FIXED.beta0, beta1: FIXED.beta1, sigma_eps: state.sigma_eps, rho: 0,
+           delta: state.delta };
+}
+
+/* =====================================================================
+   CHARTS — pure SVG.
+   ===================================================================== */
+const SVGNS = "http://www.w3.org/2000/svg";
+const el = (tag, attrs, text) => {
+  const e = document.createElementNS(SVGNS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (text != null) e.textContent = text;
+  return e;
+};
+const linScale = (d0, d1, r0, r1) => { const m = (r1 - r0) / (d1 - d0); return v => r0 + (v - d0) * m; };
+
+function histCounts(list){
+  const ax = state.axis, w = (ax.hi - ax.lo) / N_BINS;
+  const c = new Array(N_BINS).fill(0);
+  for (const v of list){ const i = clamp(Math.floor((v - ax.lo) / w), 0, N_BINS - 1); c[i]++; }
+  return c;
+}
+
+/* ---- (A) overlaid density histograms, fixed b₁ axis ---- */
+function drawHist(){
+  const svg = document.getElementById("svgHist");
+  svg.innerHTML = "";
+  const W = 660, H = 340, m = { l: 46, r: 16, t: 26, b: 42 };
+  const ax = state.axis;
+  const sx = linScale(ax.lo, ax.hi, m.l, W - m.r);
+  const plotH = H - m.t - m.b, plotBottom = H - m.b;
+  const binW = (ax.hi - ax.lo) / N_BINS;
+
+  const cA = histCounts(state.aList), cB = histCounts(state.bList);
+  const nA = state.aList.length, nB = state.bList.length;
+  // density = count / (total * binWidth) — same normalization for both (area = 1)
+  const densA = cA.map(c => nA ? c / (nA * binW) : 0);
+  const densB = cB.map(c => nB ? c / (nB * binW) : 0);
+  const maxDens = Math.max(1e-9, ...densA, ...densB);
+  const sy = d => plotBottom - (d / maxDens) * plotH;
+
+  svg.appendChild(el("rect", { x: m.l, y: m.t, width: W - m.l - m.r, height: plotH, fill: "#fcfdff", stroke: "var(--line)" }));
+  svg.appendChild(el("line", { x1: m.l, y1: plotBottom, x2: W - m.r, y2: plotBottom, stroke: "#aab4bf" }));
+
+  const bars = (dens, color) => {
+    for (let i = 0; i < N_BINS; i++){
+      if (dens[i] <= 0) continue;
+      const x0 = sx(ax.lo + i * binW), x1 = sx(ax.lo + (i + 1) * binW);
+      svg.appendChild(el("rect", { x: x0, y: sy(dens[i]), width: Math.max(1, x1 - x0), height: plotBottom - sy(dens[i]),
+        fill: color, "fill-opacity": .5, stroke: color, "stroke-opacity": .85, "stroke-width": .6 }));
+    }
+  };
+  bars(densA, "var(--estA)");
+  bars(densB, "var(--estB)");
+
+  // x ticks
+  for (let i = 0; i <= 8; i++){
+    const v = ax.lo + (ax.hi - ax.lo) * i / 8;
+    svg.appendChild(el("line", { x1: sx(v), y1: plotBottom, x2: sx(v), y2: plotBottom + 4, stroke: "#aab4bf" }));
+    svg.appendChild(el("text", { x: sx(v), y: plotBottom + 16, "text-anchor": "middle", "font-size": 10.5, fill: "var(--muted)" }, fmt3(v)));
+  }
+  svg.appendChild(el("text", { x: (m.l + W - m.r) / 2, y: H - 6, "text-anchor": "middle", "font-size": 11.5, fill: "var(--muted)" }, "estimate b₁"));
+
+  // vertical lines: true β₁, mean A, mean B (staggered labels)
+  vline(svg, sx(clamp(FIXED.beta1, ax.lo, ax.hi)), m.t, plotBottom, "var(--truth)", true, `β₁ = ${fmt3(FIXED.beta1)}`, "start", m.t - 8);
+  if (nA){ const mA = state.aList.reduce((s, v) => s + v, 0) / nA;
+    vline(svg, sx(clamp(mA, ax.lo, ax.hi)), m.t, plotBottom, "var(--estA)", false, `mean A = ${fmt3(mA)}`, "end", m.t + 6); }
+  if (nB){ const mB = state.bList.reduce((s, v) => s + v, 0) / nB;
+    vline(svg, sx(clamp(mB, ax.lo, ax.hi)), m.t, plotBottom, "var(--estB)", false, `mean B = ${fmt3(mB)}`, "middle", m.t + 20); }
+
+  if (!nA && !nB){
+    svg.appendChild(el("text", { x: (m.l + W - m.r) / 2, y: (m.t + plotBottom) / 2, "text-anchor": "middle", "font-size": 14, fill: "var(--muted)" },
+      "Click “Draw one sample” or “Draw 500”."));
+  }
+}
+function vline(svg, x, y0, y1, color, dashed, label, anchor, labelY){
+  svg.appendChild(el("line", { x1: x, y1: y0, x2: x, y2: y1, stroke: color, "stroke-width": 2.1, "stroke-dasharray": dashed ? "6 4" : "0" }));
+  const tx = anchor === "end" ? x - 5 : anchor === "start" ? x + 5 : x;
+  const tw = label.length * 6.6 + 6;
+  const bx = anchor === "end" ? tx - tw : anchor === "start" ? tx : tx - tw / 2;
+  svg.appendChild(el("rect", { x: bx, y: labelY - 11, width: tw, height: 14, fill: "#ffffff", opacity: .72, rx: 3 }));
+  svg.appendChild(el("text", { x: tx, y: labelY, "text-anchor": anchor, "font-size": 11.5, "font-weight": 700, fill: color }, label));
+}
+
+/* ---- (C) MSE stacked bars, fixed Y ceiling ---- */
+function drawMSE(){
+  const svg = document.getElementById("svgMSE");
+  svg.innerHTML = "";
+  const W = 340, H = 250, m = { l: 44, r: 14, t: 18, b: 40 };
+  const p = params();
+  const plotH = H - m.t - m.b, plotBottom = H - m.b;
+  const ceil = state.mseCeil;
+  const sy = v => plotBottom - clamp(v / ceil, 0, 1) * plotH;
+
+  // hatch pattern for Bias² segments
+  const defs = el("defs", {});
+  const pat = el("pattern", { id: "hatch", width: 6, height: 6, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" });
+  pat.appendChild(el("rect", { width: 6, height: 6, fill: "#ffffff", "fill-opacity": 0 }));
+  pat.appendChild(el("line", { x1: 0, y1: 0, x2: 0, y2: 6, stroke: "var(--bias)", "stroke-width": 2.4 }));
+  defs.appendChild(pat); svg.appendChild(defs);
+
+  svg.appendChild(el("rect", { x: m.l, y: m.t, width: W - m.l - m.r, height: plotH, fill: "#fcfdff", stroke: "var(--line)" }));
+  // y ticks
+  for (let i = 0; i <= 4; i++){
+    const v = ceil * i / 4, yy = sy(v);
+    svg.appendChild(el("line", { x1: m.l - 4, y1: yy, x2: m.l, y2: yy, stroke: "#aab4bf" }));
+    svg.appendChild(el("text", { x: m.l - 6, y: yy + 3.5, "text-anchor": "end", "font-size": 10, fill: "var(--muted)" }, fmt3(v)));
+  }
+  svg.appendChild(el("text", { x: 12, y: (m.t + plotBottom) / 2, "text-anchor": "middle", "font-size": 11, fill: "var(--muted)",
+    transform: `rotate(-90 12 ${(m.t + plotBottom) / 2})` }, "MSE"));
+
+  const cols = [
+    { lab: "A", color: "var(--estA)", varv: thVarA(p), bias2: 0 },
+    { lab: "B", color: "var(--estB)", varv: thVarB(p), bias2: p.delta * p.delta },
+  ];
+  const slot = (W - m.l - m.r) / 2, bw = 64;
+  cols.forEach((c, i) => {
+    const cx = m.l + slot * i + slot / 2, x0 = cx - bw / 2;
+    // Var segment (solid)
+    const yVar = sy(c.varv);
+    svg.appendChild(el("rect", { x: x0, y: yVar, width: bw, height: plotBottom - yVar, fill: c.color, "fill-opacity": .85, stroke: c.color }));
+    // Bias² segment (stacked on top, hatched)
+    if (c.bias2 > 0){
+      const top = sy(c.varv + c.bias2);
+      svg.appendChild(el("rect", { x: x0, y: top, width: bw, height: yVar - top, fill: c.color, "fill-opacity": .35, stroke: c.color }));
+      svg.appendChild(el("rect", { x: x0, y: top, width: bw, height: yVar - top, fill: "url(#hatch)" }));
+    }
+    // total MSE marker + label
+    const mse = c.varv + c.bias2;
+    svg.appendChild(el("text", { x: cx, y: sy(mse) - 6, "text-anchor": "middle", "font-size": 11, "font-weight": 700, fill: c.color }, fmt3(mse)));
+    svg.appendChild(el("text", { x: cx, y: plotBottom + 16, "text-anchor": "middle", "font-size": 12, "font-weight": 700, fill: c.color }, c.lab));
+  });
+  svg.appendChild(el("line", { x1: m.l, y1: plotBottom, x2: W - m.r, y2: plotBottom, stroke: "#aab4bf" }));
+}
+
+/* =====================================================================
+   UI / orchestration.
+   ===================================================================== */
+const $ = id => document.getElementById(id);
+
+function resetScenario(reseed = true){
+  if (reseed) state.rng = makeRNG(state.seed >>> 0);
+  const p = params();
+  // fixed b₁ axis (spec 6.3)
+  const sdA = thSdA(p), sdB = thSdB(p), sdMax = Math.max(sdA, sdB);
+  const cMin = Math.min(p.beta1, p.beta1 + p.delta), cMax = Math.max(p.beta1, p.beta1 + p.delta);
+  state.axis = { lo: cMin - 4 * sdMax, hi: cMax + 4 * sdMax };
+  // fixed MSE ceiling: worst-case B (m = M_MIN, |δ| = 0.5) at current σ_ε, σ_x
+  const varBworst = p.sigma_eps ** 2 / (p.sigma_x ** 2 * (M_MIN - 3));
+  state.mseCeil = (varBworst + 0.25) * 1.08;
+
+  state.aList = []; state.bList = [];
+  drawHist(); drawMSE(); updateReadouts(); updateGrid(); updateMessages();
+}
+
+function addDraw(){
+  const p = params();
+  const s = makeSample(p, state.rng);
+  state.aList.push(estimatorA(s));
+  state.bList.push(estimatorB(s, p.m, p.delta));
+}
+
+function drawOne(){
+  if (state.animating) return;
+  addDraw();
+  drawHist(); updateReadouts(); updateMessages();
+}
+function drawBatch(k){
+  if (state.animating) return;
+  for (let i = 0; i < k; i++) addDraw();
+  drawHist(); updateReadouts(); updateMessages();
+}
+
+function updateReadouts(){
+  const p = params();
+  // theoretical decomposition (MSE clock bars + table)
+  const vA = thVarA(p), vB = thVarB(p), b2 = p.delta * p.delta;
+  const mseA = vA, mseB = vB + b2;
+  $("mVarA").textContent = fmt3(vA);   $("mVarB").textContent = fmt3(vB);
+  $("mBiasA").textContent = fmt3(0);   $("mBiasB").textContent = fmt3(b2);
+  $("mMseA").textContent = fmt3(mseA); $("mMseB").textContent = fmt3(mseB);
+  $("mRmseA").textContent = fmt3(Math.sqrt(mseA)); $("mRmseB").textContent = fmt3(Math.sqrt(mseB));
+  $("reVar").textContent = fmt3(relEff(vA, vB));
+  $("reMse").textContent = fmt3(relEffMSE(mseA, mseB));
+  drawMSE();
+
+  // empirical readouts (from draws)
+  const A = summarize(state.aList, p.beta1), B = summarize(state.bList, p.beta1);
+  const k = state.aList.length;
+  $("stCount").textContent = k;
+  $("stBeta").textContent = fmt3(p.beta1);
+  $("stMeanA").textContent = k ? fmt3(A.mean) : "—";
+  $("stMeanB").textContent = k ? fmt3(B.mean) : "—";
+  $("reCount").textContent = k;
+  $("empMseA").textContent = k ? fmt3(A.mse) : "—";
+  $("empMseB").textContent = k ? fmt3(B.mse) : "—";
+}
+
+function updateGrid(){
+  const p = params();
+  const biased = Math.abs(p.delta) > 1e-9;
+  const highVar = p.m < p.n;
+  ["c_unb_low", "c_unb_high", "c_bia_low", "c_bia_high"].forEach(id => {
+    const c = $(id); c.classList.remove("active"); c.innerHTML = "";
+  });
+  // A is always unbiased + low variance (the efficient baseline)
+  const aCell = "c_unb_low";
+  const bCell = (biased ? "c_bia_" : "c_unb_") + (highVar ? "high" : "low");
+  $(aCell).insertAdjacentHTML("beforeend", '<span class="mark a">A</span>');
+  $(bCell).insertAdjacentHTML("beforeend", '<span class="mark b">B</span>');
+  $(aCell).classList.add("active");
+  $(bCell).classList.add("active");
+
+  const varTxt = highVar ? "Higher variance" : "Minimum variance";
+  const biasTxt = biased ? "Biased" : "Unbiased";
+  let label = `Estimator B: ${biasTxt} · ${varTxt}`;
+  if (!biased && !highVar) label += "  (= efficient, equals A)";
+  $("bState").textContent = label;
+}
+
+function updateMessages(){
+  const p = params();
+  $("msgFixed").innerHTML = TERMINOLOGY.msgFixed;
+  const biased = Math.abs(p.delta) > 1e-9, highVar = p.m < p.n;
+  const mv = $("msgVar"), mb = $("msgBias");
+  if (highVar){ mv.classList.remove("hidden"); mv.innerHTML = TERMINOLOGY.msgVarTpl(p.m, p.n); }
+  else mv.classList.add("hidden");
+  if (biased){ mb.classList.remove("hidden"); mb.innerHTML = TERMINOLOGY.msgBiasTpl(fmt3(p.delta)); }
+  else mb.classList.add("hidden");
+  if (!biased && !highVar){ mv.classList.remove("hidden"); mv.innerHTML = TERMINOLOGY.msgEfficient; }
+}
+
+function setControlsEnabled(on){
+  ["drawOne", "draw500", "resetBtn", "verifyBtn"].forEach(id => $(id).disabled = !on);
+}
+
+/* ---- Verification panel (spec 8) ---- */
+function runVerification(){
+  setControlsEnabled(false);
+  $("verifySummary").textContent = "Running 20,000 reps…";
+  setTimeout(() => {
+    const p = params(), R = 20000;
+    const rng = makeRNG(state.seed >>> 0);
+    const aArr = new Float64Array(R), bArr = new Float64Array(R);
+    for (let r = 0; r < R; r++){
+      const s = makeSample(p, rng);
+      aArr[r] = estimatorA(s);
+      bArr[r] = estimatorB(s, p.m, p.delta);
+    }
+    const A = summarize(aArr, p.beta1), B = summarize(bArr, p.beta1);
+    const reEmp = relEff(A.varr, B.varr), reTh = (p.m - 3) / (p.n - 3);
+    const mseBTh = thVarB(p) + p.delta * p.delta;
+    // Monte-Carlo standard error of a mean estimate. Used as an ABSOLUTE
+    // tolerance so a near-zero theoretical target (e.g. β₁+δ = 0 at δ = −0.5)
+    // does not make the relative deviation blow up into a false ✗.
+    const seA = A.sd / Math.sqrt(R), seB = B.sd / Math.sqrt(R);
+
+    // [name, empirical, theoretical, thLabel, absTol]
+    const rows = [
+      ["Mean b₁(A)", A.mean, p.beta1, "β₁", 4 * seA],
+      ["SD b₁(A)", A.sd, thSdA(p), "σ_ε/(σ_x·√(n−3))", 0],
+      ["Mean b₁(B)", B.mean, p.beta1 + p.delta, "β₁ + δ", 4 * seB],
+      ["SD b₁(B)", B.sd, thSdB(p), "σ_ε/(σ_x·√(m−3))", 0],
+      ["MSE identity (B)", B.mseDirect, B.varr + B.bias * B.bias, "Var + Bias²", 1e-9],
+      ["MSE b₁(B)", B.mse, mseBTh, "σ_ε²/(σ_x²(m−3)) + δ²", 0],
+      ["Relative efficiency", reEmp, reTh, "(m−3)/(n−3)", 0],
+    ];
+    let allPass = true, html = "";
+    for (const [name, emp, th, thLabel, absTol] of rows){
+      const dAbs = Math.abs(emp - th);
+      // pass if EITHER relative ≤ 3% (when target is meaningfully non-zero)
+      // OR within the absolute tolerance (handles near-zero targets).
+      const ok = (Math.abs(th) > 1e-9 && dAbs / Math.abs(th) <= 0.03) || dAbs <= absTol;
+      allPass = allPass && ok;
+      // show relative % normally; for near-zero targets show absolute deviation.
+      const devTxt = Math.abs(th) > 1e-3 ? (dAbs / Math.abs(th) * 100).toFixed(2) + "%" : "±" + fmt3(dAbs);
+      html += `<tr><td>${name}</td><td class="num">${fmt3(emp)}</td><td class="num">${fmt3(th)} <span style="color:var(--muted);font-size:.8em">${thLabel}</span></td>` +
+              `<td class="num">${devTxt}</td><td>${ok ? '<span class="pass">✓ Pass</span>' : '<span class="fail">✗ Fail</span>'}</td></tr>`;
+    }
+    $("verifyBody").innerHTML = html;
+    $("verifySummary").innerHTML = allPass
+      ? `<span class="pass">ALL PASS ✓</span> — δ = ${fmt3(p.delta)}, m = ${p.m}, n = ${p.n}, σ_ε = ${fmt3(p.sigma_eps)} (R = 20,000).`
+      : `<span class="fail">SOME ROW FAILED ✗</span> — re-check the estimator / DGP formulas.`;
+    setControlsEnabled(true);
+  }, 30);
+}
+
+/* =====================================================================
+   EVENT WIRING
+   ===================================================================== */
+function syncLabels(){
+  $("deltaVal").textContent = fmt3(state.delta);
+  $("mVal").textContent = state.m;
+  $("nVal").textContent = state.n;
+  $("sigVal").textContent = fmt3(state.sigma_eps);
+  $("subtitle").textContent =
+    `A = Full-sample OLS · B = OLS on first m obs (+δ) · ρ = 0 · μ_x = ${fmt3(FIXED.mu_x)}, σ_x = ${fmt3(FIXED.sigma_x)}, β₀ = ${fmt3(FIXED.beta0)}, β₁ = ${fmt3(FIXED.beta1)} (fixed)`;
+}
+
+/* keep m within [M_MIN, n]; update the m slider's max when n changes */
+function clampM(){
+  $("mSize").max = state.n;
+  state.m = clamp(state.m, M_MIN, state.n);
+  $("mSize").value = state.m;
+}
+
+function onParamChange(){ clampM(); syncLabels(); updateGrid(); resetScenario(true); }
+
+$("delta").addEventListener("input", e => { state.delta = parseFloat(e.target.value); onParamChange(); });
+$("mSize").addEventListener("input", e => { state.m = parseInt(e.target.value, 10); onParamChange(); });
+$("nSize").addEventListener("input", e => { state.n = parseInt(e.target.value, 10); onParamChange(); });
+$("sigEps").addEventListener("input", e => { state.sigma_eps = parseFloat(e.target.value); onParamChange(); });
+
+$("drawOne").addEventListener("click", drawOne);
+$("draw500").addEventListener("click", () => drawBatch(500));
+$("resetBtn").addEventListener("click", () => resetScenario(true));
+$("verifyBtn").addEventListener("click", runVerification);
+
+$("seedInput").addEventListener("change", e => {
+  const v = parseInt(e.target.value, 10);
+  state.seed = Number.isFinite(v) ? (v >>> 0) : DEFAULT_SEED;
+  resetScenario(true);
+});
+$("seedDefault").addEventListener("click", () => { state.seed = DEFAULT_SEED; $("seedInput").value = DEFAULT_SEED; resetScenario(true); });
+$("seedRandom").addEventListener("click", () => {
+  const r = makeRNG(state.seed >>> 0); let s = 0;
+  for (let i = 0; i < 5; i++) s = (s * 65599 + Math.floor(r.rand() * 4294967296)) >>> 0;
+  state.seed = s >>> 0; $("seedInput").value = state.seed; resetScenario(true);
+});
+$("presentMode").addEventListener("change", e => {
+  document.body.classList.toggle("present", e.target.checked);
+  drawHist(); drawMSE();
+});
+
+/* =====================================================================
+   STARTUP
+   ===================================================================== */
+clampM(); syncLabels(); updateGrid(); resetScenario(true);
+</script>
+</body>
+</html>
