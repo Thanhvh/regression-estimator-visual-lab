@@ -28,3 +28,4 @@ Ghi lại CÁC QUYẾT ĐỊNH và LÝ DO, để không lặp lại tranh luận
 - **ĐẢO quyết định cũ: giao diện ứng dụng nay dùng tiếng Anh, không phải tiếng Việt.** Lý do: thuật ngữ kinh tế lượng tài chính theo chuẩn tiếng Anh, giảng viên muốn nhất quán khi dạy. Áp dụng cho mọi tệp HTML bài học (chuỗi UI + chú thích code).
 - Ký hiệu toán **giữ nguyên** Latin/Hy Lạp như Mục 1.1 (`β₀, β₁, b₀, b₁, ε, e, ŷ`) — trung lập ngôn ngữ. Khóa ký hiệu (ε=sai số, e=phần dư) **không đổi**.
 - Đã sửa quy tắc trong `CLAUDE.md` và `specs/01_...md` để khóa cứng, tránh phiên sau tự quay lại tiếng Việt.
+- Quyết định: giao diện UI dùng tiếng Anh; ký hiệu toán vẫn giữ ε (sai số) / e (phần dư) theo quy ước đã khóa.

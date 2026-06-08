@@ -1,6 +1,6 @@
 # Dự án: Regression Estimator Visual Lab
 
-Công cụ trực quan dạy kinh tế lượng tài chính. **Nguồn chân lý cho yêu cầu là `SPEC.md` — đọc nó trước khi làm bất cứ việc gì.**
+Công cụ trực quan dạy kinh tế lượng tài chính. **Nguồn chân lý cho yêu cầu là `specs/01_sampling_distribution_unbiasedness.md` — đọc nó trước khi làm bất cứ việc gì.**
 
 ## Quy tắc bắt buộc (KHÔNG vi phạm)
 
@@ -10,7 +10,7 @@ Công cụ trực quan dạy kinh tế lượng tài chính. **Nguồn chân lý
 - Sinh ngẫu nhiên qua **PRNG có seed** (ví dụ mulberry32). KHÔNG dùng `Math.random()` trực tiếp.
 - Hiển thị số: **3 chữ số thập phân, dấu chấm** (ví dụ `0.035`).
 - Toàn bộ giao diện **tiếng Anh** (thuật ngữ kinh tế lượng theo chuẩn tiếng Anh); ký hiệu toán giữ nguyên Latin/Hy Lạp.
-- Mọi công thức kinh tế lượng phải theo đúng **Mục 3 của `SPEC.md`**.
+- Mọi công thức kinh tế lượng phải theo đúng **Mục 3 của `specs/01_sampling_distribution_unbiasedness.md`**.
 
 ## Phạm vi hiện tại (lát cắt dọc đầu tiên)
 
@@ -20,6 +20,6 @@ Công cụ trực quan dạy kinh tế lượng tài chính. **Nguồn chân lý
 
 ## Cách làm việc
 
-- Trước khi viết code: đọc `SPEC.md`, trình bày **kế hoạch ngắn gọn** để người dùng duyệt.
-- Sau khi xong: **tự chạy panel kiểm chứng** (Mục 7 của `SPEC.md`) với `ρ = 0, 0.3, 0.6`; báo lại bảng kết quả thực nghiệm vs lý thuyết. Nếu có dòng "✗" (lệch > 3%), tự sửa rồi chạy lại đến khi đạt.
+- Trước khi viết code: đọc `specs/01_sampling_distribution_unbiasedness.md`, trình bày **kế hoạch ngắn gọn** để người dùng duyệt.
+- Sau khi xong: **tự chạy panel kiểm chứng** (Mục 7 của `specs/01_sampling_distribution_unbiasedness.md`) với `ρ = 0, 0.3, 0.6`; báo lại bảng kết quả thực nghiệm vs lý thuyết. Nếu có dòng "✗" (lệch > 3%), tự sửa rồi chạy lại đến khi đạt.
 - **Commit git** ở mỗi mốc hoàn thành để có thể quay lui.
