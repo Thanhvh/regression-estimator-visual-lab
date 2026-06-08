@@ -23,3 +23,8 @@ Ghi lại CÁC QUYẾT ĐỊNH và LÝ DO, để không lặp lại tranh luận
 
 ## Quản trị tệp
 - Nguồn chân lý cho yêu cầu: `SPEC.md` (trong `specs/`). Nguyên tắc lâu dài: `CLAUDE.md` (Claude Code tự đọc mỗi phiên). Lịch sử phiên bản: dùng **git** (không tạo thư mục lưu trữ thủ công).
+
+## Ngôn ngữ giao diện (cập nhật 2026-06-08)
+- **ĐẢO quyết định cũ: giao diện ứng dụng nay dùng tiếng Anh, không phải tiếng Việt.** Lý do: thuật ngữ kinh tế lượng tài chính theo chuẩn tiếng Anh, giảng viên muốn nhất quán khi dạy. Áp dụng cho mọi tệp HTML bài học (chuỗi UI + chú thích code).
+- Ký hiệu toán **giữ nguyên** Latin/Hy Lạp như Mục 1.1 (`β₀, β₁, b₀, b₁, ε, e, ŷ`) — trung lập ngôn ngữ. Khóa ký hiệu (ε=sai số, e=phần dư) **không đổi**.
+- Đã sửa quy tắc trong `CLAUDE.md` và `specs/01_...md` để khóa cứng, tránh phiên sau tự quay lại tiếng Việt.

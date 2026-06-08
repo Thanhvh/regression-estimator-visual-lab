@@ -9,7 +9,7 @@ Công cụ trực quan dạy kinh tế lượng tài chính. **Nguồn chân lý
 - **KHÔNG** thư viện ngoài, **KHÔNG** CDN, **KHÔNG** `import` ngoài, **KHÔNG** gọi mạng. Vẽ bằng **SVG/Canvas thuần + JS thuần**.
 - Sinh ngẫu nhiên qua **PRNG có seed** (ví dụ mulberry32). KHÔNG dùng `Math.random()` trực tiếp.
 - Hiển thị số: **3 chữ số thập phân, dấu chấm** (ví dụ `0.035`).
-- Toàn bộ giao diện **tiếng Việt**; ký hiệu toán giữ nguyên Latin/Hy Lạp.
+- Toàn bộ giao diện **tiếng Anh** (thuật ngữ kinh tế lượng theo chuẩn tiếng Anh); ký hiệu toán giữ nguyên Latin/Hy Lạp.
 - Mọi công thức kinh tế lượng phải theo đúng **Mục 3 của `SPEC.md`**.
 
 ## Phạm vi hiện tại (lát cắt dọc đầu tiên)

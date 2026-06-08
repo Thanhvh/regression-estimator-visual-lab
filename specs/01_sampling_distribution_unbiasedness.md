@@ -46,7 +46,7 @@ Mô hình tổng thể: `yᵢ = β₀ + β₁·xᵢ + εᵢ` — Mô hình mẫu
 - Chạy trên Chrome, Edge, Firefox, Safari bản hiện hành.
 - **Sinh số ngẫu nhiên phải qua một PRNG có seed do agent tự cài** (ví dụ mulberry32). KHÔNG dùng `Math.random()` trực tiếp, vì nó không tái lập được.
 - **Hiển thị số:** 3 chữ số thập phân, dấu chấm thập phân (ví dụ `0.035`), không dùng dấu phẩy.
-- Giao diện tiếng Việt; ký hiệu toán giữ Latin/Hy Lạp như 1.1.
+- Giao diện tiếng Anh (thuật ngữ kinh tế lượng theo chuẩn tiếng Anh); ký hiệu toán giữ Latin/Hy Lạp như 1.1.
 - Tách code theo khối có chú thích, mô phỏng cấu trúc thư viện tương lai (Mục 9): `TERMINOLOGY → RNG → DGP → OLS → SAMPLING → CHARTS → UI`.
 - Nền sáng, phông sans-serif, chữ đủ lớn để đọc từ xa trên máy chiếu.
 
