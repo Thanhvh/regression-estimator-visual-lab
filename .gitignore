@@ -1,0 +1,20 @@
+# OS junk
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+
+# Editor / tooling junk
+.vscode/
+.idea/
+*.swp
+*~
+
+# Local temp / test files
+_*.cjs
+_*.mjs
+.claude/
