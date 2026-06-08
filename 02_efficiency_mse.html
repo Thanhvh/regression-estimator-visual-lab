@@ -66,6 +66,11 @@ button.ghost{background:transparent}
 .anim-row .anim-speed input[type=range]{width:130px;accent-color:var(--accent)}
 .anim-row .anim-speed .val{color:var(--accent);font-variant-numeric:tabular-nums}
 .anim-row .anim-hint{color:var(--muted);font-size:.78rem}
+.mini{padding:5px 11px;font-size:.82rem;margin-left:auto}
+.bundle-note{margin-top:10px;font-size:.8rem;color:var(--muted);background:#f1f4f8;border-radius:8px;padding:8px 11px}
+@keyframes bundleFade{from{opacity:0}to{opacity:1}}
+.bundle-fade{animation:bundleFade .35s ease both}
+@media (prefers-reduced-motion: reduce){.bundle-fade{animation:none}}
 
 .stage{display:grid;grid-template-columns:1.7fr 1fr;gap:16px;margin-top:14px}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px;min-width:0}
@@ -190,6 +195,11 @@ body.present .panel h2{font-size:1.2rem}
       <span class="anim-hint" id="animHint"></span>
     </div>
 
+    <div class="anim-row">
+      <label class="switch"><input type="checkbox" id="bundleOn"><span class="track"></span>Show regression-line bundle</label>
+      <span class="anim-hint">A side panel of 50 sample regression lines (spaghetti) — uses its own seed, never touches the histogram.</span>
+    </div>
+
     <details class="advanced">
       <summary>Advanced options</summary>
       <div class="adv-body">
@@ -265,6 +275,20 @@ body.present .panel h2{font-size:1.2rem}
         <div class="cell" id="c_bia_high" style="grid-row:3;grid-column:3"></div>
       </div>
       <div class="note">Efficiency (Gauss–Markov) is defined <b>among unbiased estimators</b>: the efficient one has the smallest variance (BLUE). For biased estimators, compare variance or MSE instead. The dispersion axis here is <b>precision / variance</b>.</div>
+    </div>
+
+    <!-- (D) Regression-line bundle (spaghetti) — optional sub-panel, §7b -->
+    <div class="panel full" id="panelBundle" style="display:none">
+      <h2><span class="tag">D · Line bundle</span> 50 sample regression lines (spaghetti)
+        <button id="bundleResample" class="mini">Resample lines</button></h2>
+      <div class="desc" id="bundleCaption"></div>
+      <svg id="svgBundle" viewBox="0 0 660 360" role="img" aria-label="Bundle of sample regression lines"></svg>
+      <div class="legend">
+        <span class="it"><span class="ln" style="border-top-color:var(--estA)"></span>A — Full-sample OLS lines</span>
+        <span class="it"><span class="ln" style="border-top-color:var(--estB)"></span>B — Estimator B lines</span>
+        <span class="it"><span class="ln" style="border-top-color:var(--truth)"></span>true line β₀+β₁·x</span>
+      </div>
+      <div class="bundle-note">Note: B is defined only by its <b>slope</b>, so the line's intercept is a display choice — each B line is drawn with slope b₁(subsample)+δ, rotated about its subsample mean (x̄<sub>m</sub>, ȳ<sub>m</sub>).</div>
     </div>
   </section>
 
@@ -434,6 +458,8 @@ const state = {
   anim: null,       // active drop-animation controller, else null
   bounce: null,     // {binA, binB, scale} bin-bounce overlay for drawHist, else null
   geom: null,       // cached chart geometry for the falling-point overlay
+  // ---- §7b regression-line bundle (separate panel, OWN prng) ----
+  bundle: { on: false, rng: null, lines: null, xRange: null, yRange: null },
 };
 
 /* Effective engine params (rho fixed at 0). */
@@ -851,6 +877,101 @@ function runVerification(){
 }
 
 /* =====================================================================
+   §7b — REGRESSION-LINE BUNDLE (spaghetti) — a SEPARATE optional panel.
+   Uses its OWN PRNG (seed = baseSeed + 1) so it never perturbs the main draw
+   stream or the histogram. Lines use the CORE definitions: line A = full-sample
+   OLS (fitOLS on all n); line B = the subsample OLS slope b₁(subsample)+δ
+   (= estimatorB) rotated about the subsample mean (x̄_m, ȳ_m).
+   ===================================================================== */
+const N_BUNDLE = 50;
+
+function bundleReseed(){ state.bundle.rng = makeRNG((state.seed + 1) >>> 0); }   // derived, deterministic
+
+function bundleComputeAxes(){
+  const p = params();
+  const xlo = p.mu_x - 3 * p.sigma_x, xhi = p.mu_x + 3 * p.sigma_x;
+  const yA = p.beta0 + p.beta1 * xlo, yB = p.beta0 + p.beta1 * xhi;
+  // FIXED y-range from current parameters (NOT autoscaled per resample): covers
+  // the slope spread (≈4·sd_slope × half-range), the δ tilt, and intercept noise.
+  const mm = Math.max(M_MIN, p.m);
+  const pad = 10.5 * p.sigma_eps / Math.sqrt(mm - 3) + 3 * p.sigma_x * Math.abs(p.delta) + 3.5 * p.sigma_eps / Math.sqrt(mm);
+  state.bundle.xRange = [xlo, xhi];
+  state.bundle.yRange = [Math.min(yA, yB) - pad, Math.max(yA, yB) + pad];
+}
+
+function bundleSampleLines(){
+  const p = params(), rng = state.bundle.rng, lines = [];
+  for (let i = 0; i < N_BUNDLE; i++){
+    const s = makeSample(p, rng);                            // SEPARATE prng stream
+    const fa = fitOLS(s.x, s.y);                             // line A = full-sample OLS (fa.b1 === estimatorA(s))
+    const fm = fitOLS(s.x.slice(0, p.m), s.y.slice(0, p.m)); // core OLS on first m obs
+    const slopeB = fm.b1 + p.delta;                          // === estimatorB(s, m, δ) by definition
+    const intB = fm.ybar - slopeB * fm.xbar;                 // rotate B about the subsample mean
+    lines.push({ aB0: fa.b0, aB1: fa.b1, bSlope: slopeB, bInt: intB });
+  }
+  state.bundle.lines = lines;
+}
+
+function drawBundle(){
+  const svg = $("svgBundle"); if (!svg) return;
+  svg.innerHTML = "";
+  const W = 660, H = 360, m = { l: 46, r: 16, t: 18, b: 38 };
+  const [xlo, xhi] = state.bundle.xRange, [ylo, yhi] = state.bundle.yRange;
+  const sx = linScale(xlo, xhi, m.l, W - m.r), sy = linScale(ylo, yhi, H - m.b, m.t);
+  const p = params();
+
+  const defs = el("defs", {});
+  const cp = el("clipPath", { id: "bundleClip" });
+  cp.appendChild(el("rect", { x: m.l, y: m.t, width: W - m.l - m.r, height: H - m.t - m.b }));
+  defs.appendChild(cp); svg.appendChild(defs);
+
+  svg.appendChild(el("rect", { x: m.l, y: m.t, width: W - m.l - m.r, height: H - m.t - m.b, fill: "#fcfdff", stroke: "var(--line)" }));
+  svg.appendChild(el("line", { x1: m.l, y1: H - m.b, x2: W - m.r, y2: H - m.b, stroke: "#aab4bf" }));
+  svg.appendChild(el("line", { x1: m.l, y1: m.t, x2: m.l, y2: H - m.b, stroke: "#aab4bf" }));
+  for (let i = 0; i <= 4; i++){
+    const xv = xlo + (xhi - xlo) * i / 4;
+    svg.appendChild(el("line", { x1: sx(xv), y1: H - m.b, x2: sx(xv), y2: H - m.b + 4, stroke: "#aab4bf" }));
+    svg.appendChild(el("text", { x: sx(xv), y: H - m.b + 15, "text-anchor": "middle", "font-size": 10, fill: "var(--muted)" }, fmt3(xv)));
+    const yv = ylo + (yhi - ylo) * i / 4;
+    svg.appendChild(el("line", { x1: m.l - 4, y1: sy(yv), x2: m.l, y2: sy(yv), stroke: "#aab4bf" }));
+    svg.appendChild(el("text", { x: m.l - 6, y: sy(yv) + 3.5, "text-anchor": "end", "font-size": 10, fill: "var(--muted)" }, fmt3(yv)));
+  }
+  svg.appendChild(el("text", { x: (m.l + W - m.r) / 2, y: H - 4, "text-anchor": "middle", "font-size": 11, fill: "var(--muted)" }, "x"));
+  svg.appendChild(el("text", { x: 12, y: (m.t + H - m.b) / 2, "text-anchor": "middle", "font-size": 11, fill: "var(--muted)", transform: `rotate(-90 12 ${(m.t + H - m.b) / 2})` }, "y"));
+
+  const g = el("g", { "clip-path": "url(#bundleClip)", class: "bundle-fade" });
+  svg.appendChild(g);
+  const lines = state.bundle.lines || [];
+  const seg = (i0, slope, color, alpha) =>
+    g.appendChild(el("line", { x1: sx(xlo), y1: sy(i0 + slope * xlo), x2: sx(xhi), y2: sy(i0 + slope * xhi),
+      stroke: color, "stroke-opacity": alpha, "stroke-width": 1 }));
+  // draw order: B lines (bottom) → A lines (middle) → true line (top)
+  for (const L of lines) seg(L.bInt, L.bSlope, "var(--estB)", 0.2);
+  for (const L of lines) seg(L.aB0, L.aB1, "var(--estA)", 0.2);
+  g.appendChild(el("line", { x1: sx(xlo), y1: sy(p.beta0 + p.beta1 * xlo), x2: sx(xhi), y2: sy(p.beta0 + p.beta1 * xhi),
+    stroke: "var(--truth)", "stroke-width": 3 }));
+}
+
+function updateBundleCaption(){
+  const p = params();
+  let c = "Each line is the regression from one sample. An efficient estimator → its lines hug the true line; an inefficient one → they fan out.";
+  if (p.m < p.n) c += ` B uses only m = ${p.m} of n = ${p.n} obs, so the B bundle (orange) is visibly wider than A's (blue).`;
+  if (Math.abs(p.delta) > 1e-9) c += ` With δ = ${fmt3(p.delta)} ≠ 0, the B bundle is systematically tilted off the true line (bias).`;
+  else c += " With δ = 0, both bundles are centered on the true line.";
+  const elc = $("bundleCaption"); if (elc) elc.textContent = c;
+}
+
+// reseed (default) + recompute fixed axes; redraw a fresh set only if the panel is shown
+function refreshBundle(opts){
+  opts = opts || {};
+  if (opts.reseed || !state.bundle.rng) bundleReseed();
+  bundleComputeAxes();
+  if (state.bundle.on){ bundleSampleLines(); drawBundle(); }
+  else state.bundle.lines = null;     // sampled lazily when the panel is first shown
+  updateBundleCaption();
+}
+
+/* =====================================================================
    EVENT WIRING
    ===================================================================== */
 function syncLabels(){
@@ -869,7 +990,7 @@ function clampM(){
   $("mSize").value = state.m;
 }
 
-function onParamChange(){ clampM(); syncLabels(); updateGrid(); resetScenario(true); }
+function onParamChange(){ clampM(); syncLabels(); updateGrid(); resetScenario(true); refreshBundle({ reseed: true }); }
 
 $("delta").addEventListener("input", e => { state.delta = parseFloat(e.target.value); onParamChange(); });
 $("mSize").addEventListener("input", e => { state.m = parseInt(e.target.value, 10); onParamChange(); });
@@ -884,13 +1005,29 @@ $("verifyBtn").addEventListener("click", runVerification);
 $("seedInput").addEventListener("change", e => {
   const v = parseInt(e.target.value, 10);
   state.seed = Number.isFinite(v) ? (v >>> 0) : DEFAULT_SEED;
-  resetScenario(true);
+  resetScenario(true); refreshBundle({ reseed: true });
 });
-$("seedDefault").addEventListener("click", () => { state.seed = DEFAULT_SEED; $("seedInput").value = DEFAULT_SEED; resetScenario(true); });
+$("seedDefault").addEventListener("click", () => { state.seed = DEFAULT_SEED; $("seedInput").value = DEFAULT_SEED; resetScenario(true); refreshBundle({ reseed: true }); });
 $("seedRandom").addEventListener("click", () => {
   const r = makeRNG(state.seed >>> 0); let s = 0;
   for (let i = 0; i < 5; i++) s = (s * 65599 + Math.floor(r.rand() * 4294967296)) >>> 0;
-  state.seed = s >>> 0; $("seedInput").value = state.seed; resetScenario(true);
+  state.seed = s >>> 0; $("seedInput").value = state.seed; resetScenario(true); refreshBundle({ reseed: true });
+});
+
+/* ---- §7b regression-line bundle controls (independent of the histogram) ---- */
+$("bundleOn").addEventListener("change", e => {
+  state.bundle.on = e.target.checked;
+  $("panelBundle").style.display = state.bundle.on ? "" : "none";
+  if (state.bundle.on){
+    if (!state.bundle.rng) bundleReseed();
+    bundleComputeAxes(); bundleSampleLines(); drawBundle();
+  }
+  updateBundleCaption();
+});
+$("bundleResample").addEventListener("click", () => {
+  if (!state.bundle.on) return;
+  bundleSampleLines();          // continue the bundle's own stream → a fresh set of lines
+  drawBundle();
 });
 $("presentMode").addEventListener("change", e => {
   document.body.classList.toggle("present", e.target.checked);
@@ -920,7 +1057,7 @@ function initAnimUI(){
 /* =====================================================================
    STARTUP
    ===================================================================== */
-clampM(); syncLabels(); updateGrid(); initAnimUI(); resetScenario(true);
+clampM(); syncLabels(); updateGrid(); initAnimUI(); resetScenario(true); refreshBundle({ reseed: true });
 </script>
 </body>
 </html>
