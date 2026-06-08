@@ -61,6 +61,11 @@ button.ghost{background:transparent}
 .advanced summary{cursor:pointer;font-weight:600;font-size:.9rem;color:var(--muted)}
 .advanced .adv-body{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:10px}
 .advanced input[type=number]{font:inherit;padding:7px 9px;border:1px solid var(--line);border-radius:8px;width:130px}
+.anim-row{grid-column:1 / -1;display:flex;gap:18px;align-items:center;flex-wrap:wrap;border-top:1px dashed var(--line);padding-top:12px}
+.anim-row .anim-speed{display:flex;align-items:center;gap:8px;font-weight:600;font-size:.9rem}
+.anim-row .anim-speed input[type=range]{width:130px;accent-color:var(--accent)}
+.anim-row .anim-speed .val{color:var(--accent);font-variant-numeric:tabular-nums}
+.anim-row .anim-hint{color:var(--muted);font-size:.78rem}
 
 .stage{display:grid;grid-template-columns:1.7fr 1fr;gap:16px;margin-top:14px}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px;min-width:0}
@@ -173,6 +178,16 @@ body.present .panel h2{font-size:1.2rem}
       <button id="draw500">Draw 500</button>
       <button id="resetBtn" class="ghost">Reset</button>
       <button id="verifyBtn">Run verification (20,000)</button>
+    </div>
+
+    <div class="anim-row">
+      <label class="switch"><input type="checkbox" id="animOn" checked><span class="track"></span>Animation</label>
+      <label class="anim-speed">Animation speed
+        <input type="range" id="animSpeed" min="0.2" max="1.5" step="0.1" value="0.7">
+        <span class="val" id="animSpeedVal">0.7 s</span>
+      </label>
+      <button id="pauseBtn">Pause</button>
+      <span class="anim-hint" id="animHint"></span>
     </div>
 
     <details class="advanced">
@@ -412,7 +427,13 @@ const state = {
   aList: [], bList: [],
   axis: null,       // {lo, hi} fixed b₁ axis
   mseCeil: 1,       // fixed MSE-bar ceiling
-  animating: false,
+  // ---- animation DISPLAY layer (separate from the engine / data model) ----
+  animOn: true,     // in-app Animation on/off toggle
+  animDur: 700,     // drop duration in ms (from the speed slider)
+  flight: false,    // is a single just-drawn sample still falling (not yet landed)?
+  anim: null,       // active drop-animation controller, else null
+  bounce: null,     // {binA, binB, scale} bin-bounce overlay for drawHist, else null
+  geom: null,       // cached chart geometry for the falling-point overlay
 };
 
 /* Effective engine params (rho fixed at 0). */
@@ -434,10 +455,16 @@ const el = (tag, attrs, text) => {
 };
 const linScale = (d0, d1, r0, r1) => { const m = (r1 - r0) / (d1 - d0); return v => r0 + (v - d0) * m; };
 
-function histCounts(list){
+// number of samples to DISPLAY (excludes the one still falling, if any)
+function dispLen(list){ return state.flight ? Math.max(0, list.length - 1) : list.length; }
+function binOf(v){ const ax = state.axis, w = (ax.hi - ax.lo) / N_BINS; return clamp(Math.floor((v - ax.lo) / w), 0, N_BINS - 1); }
+function meanOf(list, len){ let s = 0; for (let i = 0; i < len; i++) s += list[i]; return len ? s / len : NaN; }
+
+function histCounts(list, len){
+  if (len == null) len = list.length;
   const ax = state.axis, w = (ax.hi - ax.lo) / N_BINS;
   const c = new Array(N_BINS).fill(0);
-  for (const v of list){ const i = clamp(Math.floor((v - ax.lo) / w), 0, N_BINS - 1); c[i]++; }
+  for (let i = 0; i < len; i++){ const idx = clamp(Math.floor((list[i] - ax.lo) / w), 0, N_BINS - 1); c[idx]++; }
   return c;
 }
 
@@ -451,8 +478,11 @@ function drawHist(){
   const plotH = H - m.t - m.b, plotBottom = H - m.b;
   const binW = (ax.hi - ax.lo) / N_BINS;
 
-  const cA = histCounts(state.aList), cB = histCounts(state.bList);
-  const nA = state.aList.length, nB = state.bList.length;
+  // displayed counts exclude an in-flight (still falling) draw, so a bin grows
+  // only when its point lands. The data model (aList/bList) is never altered.
+  state.geom = { sx, plotBottom, top: m.t };
+  const nA = dispLen(state.aList), nB = dispLen(state.bList);
+  const cA = histCounts(state.aList, nA), cB = histCounts(state.bList, nB);
   // density = count / (total * binWidth) — same normalization for both (area = 1)
   const densA = cA.map(c => nA ? c / (nA * binW) : 0);
   const densB = cB.map(c => nB ? c / (nB * binW) : 0);
@@ -462,16 +492,19 @@ function drawHist(){
   svg.appendChild(el("rect", { x: m.l, y: m.t, width: W - m.l - m.r, height: plotH, fill: "#fcfdff", stroke: "var(--line)" }));
   svg.appendChild(el("line", { x1: m.l, y1: plotBottom, x2: W - m.r, y2: plotBottom, stroke: "#aab4bf" }));
 
-  const bars = (dens, color) => {
+  const bb = state.bounce;   // {binA, binB, scale} during the landing bounce, else null
+  const bars = (dens, color, bounceBin) => {
     for (let i = 0; i < N_BINS; i++){
       if (dens[i] <= 0) continue;
       const x0 = sx(ax.lo + i * binW), x1 = sx(ax.lo + (i + 1) * binW);
-      svg.appendChild(el("rect", { x: x0, y: sy(dens[i]), width: Math.max(1, x1 - x0), height: plotBottom - sy(dens[i]),
+      let h = plotBottom - sy(dens[i]);
+      if (bb && i === bounceBin) h += bb.px;       // additive pixel pop (overflow-safe); no data change
+      svg.appendChild(el("rect", { x: x0, y: plotBottom - h, width: Math.max(1, x1 - x0), height: h,
         fill: color, "fill-opacity": .5, stroke: color, "stroke-opacity": .85, "stroke-width": .6 }));
     }
   };
-  bars(densA, "var(--estA)");
-  bars(densB, "var(--estB)");
+  bars(densA, "var(--estA)", bb ? bb.binA : -1);
+  bars(densB, "var(--estB)", bb ? bb.binB : -1);
 
   // x ticks
   for (let i = 0; i <= 8; i++){
@@ -481,11 +514,11 @@ function drawHist(){
   }
   svg.appendChild(el("text", { x: (m.l + W - m.r) / 2, y: H - 6, "text-anchor": "middle", "font-size": 11.5, fill: "var(--muted)" }, "estimate b₁"));
 
-  // vertical lines: true β₁, mean A, mean B (staggered labels)
+  // vertical lines: true β₁, mean A, mean B (staggered labels) — over displayed data
   vline(svg, sx(clamp(FIXED.beta1, ax.lo, ax.hi)), m.t, plotBottom, "var(--truth)", true, `β₁ = ${fmt3(FIXED.beta1)}`, "start", m.t - 8);
-  if (nA){ const mA = state.aList.reduce((s, v) => s + v, 0) / nA;
+  if (nA){ const mA = meanOf(state.aList, nA);
     vline(svg, sx(clamp(mA, ax.lo, ax.hi)), m.t, plotBottom, "var(--estA)", false, `mean A = ${fmt3(mA)}`, "end", m.t + 6); }
-  if (nB){ const mB = state.bList.reduce((s, v) => s + v, 0) / nB;
+  if (nB){ const mB = meanOf(state.bList, nB);
     vline(svg, sx(clamp(mB, ax.lo, ax.hi)), m.t, plotBottom, "var(--estB)", false, `mean B = ${fmt3(mB)}`, "middle", m.t + 20); }
 
   if (!nA && !nB){
@@ -559,6 +592,7 @@ function drawMSE(){
 const $ = id => document.getElementById(id);
 
 function resetScenario(reseed = true){
+  cancelAnim();                       // discard any falling point before clearing the scenario
   if (reseed) state.rng = makeRNG(state.seed >>> 0);
   const p = params();
   // fixed b₁ axis (spec 6.3)
@@ -581,14 +615,123 @@ function addDraw(){
 }
 
 function drawOne(){
-  if (state.animating) return;
-  addDraw();
-  drawHist(); updateReadouts(); updateMessages();
+  if (state.anim) snapAnim();         // finalize any in-flight draw first (no overlap, no double-count)
+  addDraw();                          // ENGINE: computes b₁(A), b₁(B) ONCE and pushes to the data model
+  if (!effectiveAnimate()){
+    drawHist(); updateReadouts(); updateMessages();
+    return;
+  }
+  startDropAnimation(state.aList[state.aList.length - 1], state.bList[state.bList.length - 1]);
 }
 function drawBatch(k){
-  if (state.animating) return;
-  for (let i = 0; i < k; i++) addDraw();
+  if (state.anim) snapAnim();         // finalize any in-flight draw; the batch is never animated
+  for (let i = 0; i < k; i++) addDraw();        // all k computed synchronously
+  drawHist(); updateReadouts(); updateMessages();   // single render, no per-sample frames
+}
+
+/* =====================================================================
+   ANIMATION LAYER (spec 7) — a SEPARATE display layer. It interpolates ONLY
+   the pixel y-position of the two falling points and a bin "bounce". It never
+   changes any statistic: b₁ is computed once by addDraw(); aList/bList are the
+   single source of truth; the final render with animation ON is identical to
+   animation OFF for the same seed. No PRNG is drawn here; easing is determinate.
+   ===================================================================== */
+let _rafId = null;
+const _reduceMotion = (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)")) || { matches: false };
+const prefersReduce = () => !!_reduceMotion.matches;
+const effectiveAnimate = () => state.animOn && !prefersReduce();
+
+function cancelRAF(){ if (_rafId != null){ cancelAnimationFrame(_rafId); _rafId = null; } }
+function easeOut(t){ return 1 - (1 - t) * (1 - t); }   // deterministic ease-out
+function resetPauseBtn(){ const b = $("pauseBtn"); if (b) b.textContent = "Pause"; }
+
+function startDropAnimation(b1A, b1B){
+  state.flight = true;                // hide the just-pushed sample until it lands
+  state.bounce = null;
+  state.anim = { elapsed: 0, lastTs: 0, paused: false, committed: false,
+                 duration: state.animDur, bounceDur: 240,
+                 b1A, b1B, binA: binOf(b1A), binB: binOf(b1B) };
+  resetPauseBtn();
+  drawHist();                         // pre-draw bars (flight hides the new sample)
+  updateReadouts();                   // statbar still shows the pre-draw counts
+  _rafId = requestAnimationFrame(animFrame);
+}
+
+function animFrame(ts){
+  const a = state.anim;
+  if (!a){ _rafId = null; return; }
+  if (a.lastTs === 0) a.lastTs = ts;
+  const dt = ts - a.lastTs; a.lastTs = ts;
+  if (!a.paused) a.elapsed += dt;
+  const D = a.duration, B = a.bounceDur, e = a.elapsed;
+  if (e < D){                         // falling
+    renderDrop(easeOut(e / D), 0);
+    _rafId = requestAnimationFrame(animFrame);
+  } else if (e < D + B){              // landed → bin bounce
+    if (!a.committed){ commitFlight(); a.committed = true; }
+    renderDrop(1, 9 * Math.sin(Math.PI * (e - D) / B));   // up to ~9px pop, then settle
+    _rafId = requestAnimationFrame(animFrame);
+  } else {                            // done
+    if (!a.committed){ commitFlight(); a.committed = true; }
+    finishAnim();
+  }
+}
+
+function renderDrop(fall, bouncePx){
+  const a = state.anim; if (!a) return;
+  state.bounce = bouncePx > 0 ? { binA: a.binA, binB: a.binB, px: bouncePx } : null;
+  drawHist();
+  if (fall < 1 && state.geom){        // overlay the two simultaneously-falling points
+    const g = state.geom, svg = document.getElementById("svgHist");
+    const yTop = g.top - 4, y = yTop + (g.plotBottom - yTop) * fall;
+    const xA = g.sx(clamp(a.b1A, state.axis.lo, state.axis.hi));
+    const xB = g.sx(clamp(a.b1B, state.axis.lo, state.axis.hi));
+    svg.appendChild(el("circle", { cx: xB, cy: y, r: 6, fill: "var(--estB)", stroke: "#fff", "stroke-width": 1.6 }));
+    svg.appendChild(el("circle", { cx: xA, cy: y, r: 6, fill: "var(--estA)", stroke: "#fff", "stroke-width": 1.6 }));
+  }
+}
+
+function commitFlight(){               // the in-flight sample joins the displayed histogram
+  state.flight = false;
+  updateReadouts();
+}
+function finishAnim(){                  // clean end: no flight, no bounce, no background RAF
+  cancelRAF();
+  state.anim = null; state.bounce = null; state.flight = false;
+  resetPauseBtn();
   drawHist(); updateReadouts(); updateMessages();
+}
+function snapAnim(){                    // jump a running animation to its final state (commit the sample)
+  if (!state.anim) return;
+  if (!state.anim.committed) commitFlight();
+  cancelRAF();
+  state.anim = null; state.bounce = null; state.flight = false;
+  resetPauseBtn();
+  drawHist(); updateReadouts();
+}
+function cancelAnim(){                  // discard a running animation; caller re-renders (e.g. Reset)
+  cancelRAF();
+  state.anim = null; state.bounce = null; state.flight = false;
+  resetPauseBtn();
+}
+function togglePause(){
+  const a = state.anim;
+  if (!a) return;                      // no animation running → no-op
+  a.paused = !a.paused;
+  $("pauseBtn").textContent = a.paused ? "Resume" : "Pause";
+  if (a.paused){ cancelRAF(); }        // freeze: stop the RAF loop (no background RAF)
+  else { a.lastTs = 0; if (_rafId == null) _rafId = requestAnimationFrame(animFrame); }  // resume w/o time jump
+}
+function applyReducedMotionUI(){
+  const rm = prefersReduce();
+  $("animOn").disabled = rm;
+  if (rm){
+    state.animOn = false; $("animOn").checked = false;
+    if (state.anim) snapAnim();
+    $("animHint").textContent = "Reduced-motion is on in your OS — points appear instantly.";
+  } else {
+    $("animHint").textContent = "";
+  }
 }
 
 function updateReadouts(){
@@ -604,9 +747,10 @@ function updateReadouts(){
   $("reMse").textContent = fmt3(relEffMSE(mseA, mseB));
   drawMSE();
 
-  // empirical readouts (from draws)
-  const A = summarize(state.aList, p.beta1), B = summarize(state.bList, p.beta1);
-  const k = state.aList.length;
+  // empirical readouts (from displayed draws — excludes an in-flight point)
+  const dA = dispLen(state.aList), dB = dispLen(state.bList);
+  const A = summarize(state.aList.slice(0, dA), p.beta1), B = summarize(state.bList.slice(0, dB), p.beta1);
+  const k = dA;
   $("stCount").textContent = k;
   $("stBeta").textContent = fmt3(p.beta1);
   $("stMeanA").textContent = k ? fmt3(A.mean) : "—";
@@ -656,6 +800,7 @@ function setControlsEnabled(on){
 
 /* ---- Verification panel (spec 8) ---- */
 function runVerification(){
+  if (state.anim) snapAnim();           // finalize any in-flight draw before the blocking compute
   setControlsEnabled(false);
   $("verifySummary").textContent = "Running 20,000 reps…";
   setTimeout(() => {
@@ -752,10 +897,30 @@ $("presentMode").addEventListener("change", e => {
   drawHist(); drawMSE();
 });
 
+/* ---- animation controls (display layer; do NOT reset the scenario) ---- */
+$("animOn").addEventListener("change", e => {
+  state.animOn = e.target.checked;
+  if (!state.animOn && state.anim) snapAnim();   // turning animation off mid-flight → finalize now
+});
+$("animSpeed").addEventListener("input", e => {
+  const sec = parseFloat(e.target.value);
+  state.animDur = Math.round(sec * 1000);
+  $("animSpeedVal").textContent = sec.toFixed(1) + " s";
+});
+$("pauseBtn").addEventListener("click", togglePause);
+if (_reduceMotion.addEventListener) _reduceMotion.addEventListener("change", applyReducedMotionUI);
+
+function initAnimUI(){
+  const sec = parseFloat($("animSpeed").value);
+  state.animDur = Math.round(sec * 1000);
+  $("animSpeedVal").textContent = sec.toFixed(1) + " s";
+  applyReducedMotionUI();             // respects prefers-reduced-motion
+}
+
 /* =====================================================================
    STARTUP
    ===================================================================== */
-clampM(); syncLabels(); updateGrid(); resetScenario(true);
+clampM(); syncLabels(); updateGrid(); initAnimUI(); resetScenario(true);
 </script>
 </body>
 </html>
