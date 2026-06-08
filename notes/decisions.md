@@ -22,7 +22,7 @@ Ghi lại CÁC QUYẾT ĐỊNH và LÝ DO, để không lặp lại tranh luận
 - Cấu trúc dự án rút ra từ thực tế **sau** module thứ hai, không thiết kế kiến trúc lớn trước.
 
 ## Quản trị tệp
-- Nguồn chân lý cho yêu cầu: `SPEC.md` (trong `specs/`). Nguyên tắc lâu dài: `CLAUDE.md` (Claude Code tự đọc mỗi phiên). Lịch sử phiên bản: dùng **git** (không tạo thư mục lưu trữ thủ công).
+- Nguồn chân lý cho yêu cầu: các tệp đặc tả trong thư mục `specs/` (mỗi module một tệp, ví dụ `specs/01_sampling_distribution_unbiasedness.md`). Nguyên tắc lâu dài: `CLAUDE.md` (Claude Code tự đọc mỗi phiên). Lịch sử phiên bản: dùng **git** (không tạo thư mục lưu trữ thủ công).
 
 ## Ngôn ngữ giao diện (cập nhật 2026-06-08)
 - **ĐẢO quyết định cũ: giao diện ứng dụng nay dùng tiếng Anh, không phải tiếng Việt.** Lý do: thuật ngữ kinh tế lượng tài chính theo chuẩn tiếng Anh, giảng viên muốn nhất quán khi dạy. Áp dụng cho mọi tệp HTML bài học (chuỗi UI + chú thích code).
