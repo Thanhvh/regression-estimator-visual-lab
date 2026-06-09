@@ -184,7 +184,6 @@ footer{margin-top:26px;color:var(--muted);font-size:.8rem;text-align:center;bord
       <span class="it"><span class="sw" style="border-top-color:var(--truth);border-top-style:dashed"></span>true β₁</span>
       <span class="it"><span class="sw" style="border-top-color:var(--estimate)"></span>mean b₁</span>
       <span class="it" id="lgLimit" style="display:none"><span class="sw" style="border-top-color:var(--resid);border-top-style:dashed"></span>limit (n→∞)</span>
-      <span class="it"><span class="sw" style="border-top-color:var(--shadow);border-top-style:dotted"></span>width at n=10</span>
     </div>
     <div class="statbar">
       <span><span class="k">n</span><b id="stN">30</b></span>
@@ -354,10 +353,9 @@ function computeAxis(){
   const SD0 = t0.sd, center0 = t0.mean;
   const limit = theory(state.caseId, p).limit;
   const b1 = FIXED.beta1;
-  const lo = Math.min(b1, center0, limit) - 4 * SD0;
+  const lo = Math.min(b1, center0, limit) - 4 * SD0;     // FIXED x-axis (unchanged)
   const hi = Math.max(b1, center0, limit) + 4 * SD0;
-  const yCeil = 1.3 / (SD0 * Math.sqrt(2 * Math.PI));     // ≈1.3× the peak density at n_min
-  state.axis = { lo, hi, yCeil, SD0, center0, limit };
+  state.axis = { lo, hi, SD0, center0, limit };          // y-axis autoscales per redraw (in render)
 }
 
 /* density-normalized histogram counts over the fixed axis */
@@ -373,16 +371,21 @@ function histDensity(){
 
 function render(){
   const svg = document.getElementById("svgHist"); svg.innerHTML = "";
-  const W = 720, H = 360, m = { l: 52, r: 18, t: 18, b: 46 };
+  const W = 720, H = 360, m = { l: 52, r: 18, t: 44, b: 46 };
   const ax = state.axis, p = P(), th = theory(state.caseId, p);
   const sx = linScale(ax.lo, ax.hi, m.l, W - m.r);
   const plotH = H - m.t - m.b, pb = H - m.b;
-  const sy = d => pb - clamp(d / ax.yCeil, 0, 1) * plotH;
+  // AUTOSCALE the y-axis on every redraw: the analytic density peak fills ~85% of
+  // the frame height — recomputed for the current n. No clamping anywhere, so at
+  // large n the Normal curve is a tall, narrow SPIKE (not a flat top), and the
+  // "collapse" reads as shrinking WIDTH on the FIXED x-axis, not falling height.
+  const peak = 1 / (th.sd * Math.sqrt(2 * Math.PI));
+  const sy = d => pb - (d / peak) * 0.85 * plotH;
 
   svg.appendChild(el("rect", { x: m.l, y: m.t, width: W - m.l - m.r, height: plotH, fill: "#fcfdff", stroke: "var(--line)" }));
   svg.appendChild(el("line", { x1: m.l, y1: pb, x2: W - m.r, y2: pb, stroke: "#aab4bf" }));
 
-  // histogram bars (empirical)
+  // histogram bars (density-normalized; share the autoscaled y so they hug the curve)
   const { dens, binW } = histDensity();
   for (let i = 0; i < N_BINS; i++){
     if (dens[i] <= 0) continue;
@@ -391,34 +394,31 @@ function render(){
       fill: "var(--estimate)", "fill-opacity": .45, stroke: "var(--estimate)", "stroke-opacity": .55, "stroke-width": .5 }));
   }
 
-  // faint Normal curve at n=n_min (starting width reference)
-  const curve = (mu, sd, stroke, width, dash, op) => {
-    let d = ""; const NP = 480;
-    for (let i = 0; i <= NP; i++){ const xx = ax.lo + (ax.hi - ax.lo) * i / NP; const yy = Math.min(normPDF(xx, mu, sd), ax.yCeil);
-      d += (i ? "L" : "M") + sx(xx).toFixed(2) + "," + sy(yy).toFixed(2) + " "; }
-    svg.appendChild(el("path", { d, fill: "none", stroke, "stroke-width": width, "stroke-dasharray": dash || "0", "stroke-opacity": op == null ? 1 : op }));
-  };
-  curve(ax.center0, ax.SD0, "var(--shadow)", 1.5, "2 3", .9);          // width at n_min
-  // analytic Normal curve at current n (per-pixel resolution; spike clamps to ceiling)
-  curve(th.mean, th.sd, "var(--estimate-dk)", 2.6);
+  // analytic Normal curve N(mean, SD²) at per-pixel resolution (480 pts), NO clamp
+  let d = ""; const NP = 480;
+  for (let i = 0; i <= NP; i++){ const xx = ax.lo + (ax.hi - ax.lo) * i / NP;
+    d += (i ? "L" : "M") + sx(xx).toFixed(2) + "," + sy(normPDF(xx, th.mean, th.sd)).toFixed(2) + " "; }
+  svg.appendChild(el("path", { d, fill: "none", stroke: "var(--estimate-dk)", "stroke-width": 2.6 }));
 
-  // x ticks
+  // x ticks (FIXED axis)
   for (let i = 0; i <= 8; i++){ const v = ax.lo + (ax.hi - ax.lo) * i / 8;
     svg.appendChild(el("line", { x1: sx(v), y1: pb, x2: sx(v), y2: pb + 4, stroke: "#aab4bf" }));
     svg.appendChild(el("text", { x: sx(v), y: pb + 16, "text-anchor": "middle", "font-size": 10.5, fill: "var(--muted)" }, fmt3(v))); }
   svg.appendChild(el("text", { x: (m.l + W - m.r) / 2, y: H - 6, "text-anchor": "middle", "font-size": 11.5, fill: "var(--muted)" }, "estimate b₁"));
 
-  // vertical reference lines
+  // vertical reference lines; labels on THREE distinct rows above the plot (no overlap,
+  // even when mean and limit share the same x — as in case B).
   const vline = (xv, color, dash, label, ty, anchor) => {
     const X = sx(clamp(xv, ax.lo, ax.hi));
     svg.appendChild(el("line", { x1: X, y1: m.t, x2: X, y2: pb, stroke: color, "stroke-width": 2.2, "stroke-dasharray": dash ? "6 4" : "0" }));
     const tx = anchor === "end" ? X - 4 : anchor === "start" ? X + 4 : X;
     svg.appendChild(el("text", { x: tx, y: ty, "text-anchor": anchor || "middle", "font-size": 11.5, "font-weight": 700, fill: color }, label));
   };
-  vline(FIXED.beta1, "var(--truth)", true, `true β₁ = ${fmt3(FIXED.beta1)}`, m.t - 6, "start");
+  const ROW1 = 14, ROW2 = 28, ROW3 = 42;
+  vline(FIXED.beta1, "var(--truth)", true, `true β₁ = ${fmt3(FIXED.beta1)}`, ROW1, "start");
   if (Math.abs(ax.limit - FIXED.beta1) > 1e-9)
-    vline(ax.limit, "var(--resid)", true, `limit = ${fmt3(ax.limit)}`, m.t - 6, "end");
-  vline(th.mean, "var(--estimate)", false, `mean b₁ = ${fmt3(th.mean)}`, m.t + 12, "middle");
+    vline(ax.limit, "var(--resid)", true, `limit = ${fmt3(ax.limit)}`, ROW2, "end");
+  vline(th.mean, "var(--estimate)", false, `mean b₁ = ${fmt3(th.mean)}`, ROW3, "middle");
 }
 
 /* =====================================================================

@@ -76,7 +76,7 @@ MSE(n) cho mỗi ca = `Var + Bias²`: A → 0; B → sàn `(ρσ_ε/σ_x)²`; C 
 
 **(A) Bộ chọn ca + lưới {chệch}×{vững}.** 4 nút chọn ca (A/B/C/D). Lưới 2×2 với hai trục đặt tên rõ: **"Finite-sample bias (at this n)"** × **"Consistency (n→∞)"**. Hiện CẢ BỐN ca trong ô tương ứng (A: unbiased·consistent; B: biased·inconsistent; C: biased·consistent; D: unbiased·inconsistent), tô sáng ca đang chọn, kèm dòng phán định, ví dụ "Case C: **Biased at finite n · Consistent** (collapses to β₁)". Hiện cả bốn để thấy hai trục độc lập.
 
-**(B) Khung lõi — thanh trượt n + histogram co sập (trung tâm).** Histogram phân phối lấy mẫu của ca đang chọn tại n hiện tại, trên **trục b₁ CỐ ĐỊNH** (Mục 6.3), **PHỦ đường cong mật độ Normal giải tích `N(mean_lý_thuyết, SD_lý_thuyết²)`** (mượt; vẽ spike sạch ở mọi n; là phép đối chứng — histogram phải bám đường cong). Vạch đứng: `β₁` thật (đậm, "true β₁"), `mean b₁` hiện tại; ca B/C thêm vạch mờ tại **giới hạn**. Tùy chọn: "bóng mờ" của phân phối tại n=n_min để luôn thấy mức đã hẹp đi. Ghi chú nhỏ: đường cong là xấp xỉ Normal tiệm cận (n nhỏ histogram có thể đuôi nặng hơn).
+**(B) Khung lõi — thanh trượt n + histogram co sập (trung tâm).** Histogram phân phối lấy mẫu của ca đang chọn tại n hiện tại, trên **trục b₁ (x) CỐ ĐỊNH** (Mục 6.3) với **trục y tự co giãn**, **PHỦ đường cong mật độ Normal giải tích `N(mean_lý_thuyết, SD_lý_thuyết²)`** (trơn, không kẹp; là phép đối chứng — histogram phải bám đường cong). Co sập = bề rộng hẹp dần trên trục x cố định. Vạch đứng: `β₁` thật (đậm, "true β₁"), `mean b₁` hiện tại; ca B/C thêm vạch mờ tại **giới hạn** (giãn nhãn theo chiều dọc để không đè nhau). Tùy chọn: một vạch/ngoặc tham chiếu bề rộng tại n=n_min (nếu vẽ, dùng CÙNG đỉnh với đường cong hiện tại để so bề rộng — vẽ theo mật độ thật sẽ teo mất ở n lớn). Ghi chú nhỏ: đường cong là xấp xỉ Normal tiệm cận (n nhỏ histogram có thể đuôi nặng hơn).
 
 **(C) Panel kiểm chứng + phán định giới hạn.** (Mục 8.)
 
@@ -111,9 +111,9 @@ limit  = giới hạn khi n→∞ (A,C: β₁; B: β₁+ρσ_ε/σ_x; D: β₁)
 lo = min(β₁, center0, limit) − 4·SD0
 hi = max(β₁, center0, limit) + 4·SD0
 ```
-- Chuẩn hóa **mật độ** (diện tích = 1 ⇒ hẹp thì cao). Trục y trần CỐ ĐỊNH ≈ 1.3 × đỉnh mật độ tại n_min = `1.3 / (SD0·√(2π))`. Ở n lớn, spike chạm trần — đó là biểu hiện co sập.
-- Trục x và bin cố định khi kéo n. Tính lại lo/hi/trần/bin khi đổi ca/ρ/c/k/σ_ε.
-- **Vẽ đường cong Normal ở độ phân giải mỗi-pixel (≥400 điểm)** để spike hẹp ở n lớn không bị nhảy qua.
+- Chuẩn hóa **mật độ** (diện tích = 1 ⇒ hẹp thì cao). **Trục y TỰ co giãn theo đỉnh mật độ ở n hiện tại** (đỉnh lấp ~85% khung), tính lại mỗi lần vẽ. **KHÔNG đặt trần cố định, KHÔNG kẹp đường cong** — kẹp tạo "đỉnh phẳng" xấu và xuyên tạc dạng Normal. **Cú co sập thể hiện bằng BỀ RỘNG hẹp dần trên trục x cố định**, không bằng chiều cao.
+- Trục x và bin cố định khi kéo n. Tính lại lo/hi/bin khi đổi ca/ρ/c/k/σ_ε.
+- **Vẽ đường cong Normal ở độ phân giải mỗi-pixel (≥400 điểm), TRƠN, KHÔNG kẹp giá trị** — ở n lớn nó là một đường cong cao-hẹp (spike), không phải đỉnh phẳng.
 - **Hạt giống:** khi vẽ lại histogram (nhả thanh, hoặc đổi ca/núm), gieo lại seed gốc ⇒ lô tại mỗi n là tất định (kéo qua lại không nhấp nháy). "Draw more" tiếp tục dòng PRNG để mịn thêm.
 
 ### 6.4. Hành vi đúng kỳ vọng: kéo n lên ⇒ A,B,C hẹp lại (D không); A,C tâm về β₁; B tâm giữ chỗ sai; C tâm trượt từ lệch về β₁ (rõ nhất ở n nhỏ); MSE giảm về 0 (A,C) hoặc về sàn dương (B,D).
