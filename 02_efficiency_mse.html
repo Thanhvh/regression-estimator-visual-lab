@@ -68,6 +68,16 @@ button.ghost{background:transparent}
 .anim-row .anim-hint{color:var(--muted);font-size:.78rem}
 .mini{padding:5px 11px;font-size:.82rem;margin-left:auto}
 .bundle-note{margin-top:10px;font-size:.8rem;color:var(--muted);background:#f1f4f8;border-radius:8px;padding:8px 11px}
+.shrink-ctrls{display:flex;gap:16px;align-items:end;flex-wrap:wrap;margin:6px 0 14px}
+.shrink-ctrls .ctrl{min-width:150px;flex:0 0 auto}
+.shrink-ctrls .ctrl input[type=range]{width:160px}
+.shrink-grid{display:grid;grid-template-columns:1.2fr 1fr;gap:18px;align-items:start}
+.shrink-side{display:grid;gap:8px;min-width:0}
+.shrink-readout{margin-top:8px;font-size:.9rem;font-variant-numeric:tabular-nums}
+.shrink-vtable{margin-top:12px}
+.shrink-vsum{margin-top:10px;font-weight:700}
+.oracle-note{margin-top:12px;font-size:.84rem;color:#7a4b00;background:#fff4e2;border-left:4px solid var(--resid);border-radius:8px;padding:9px 12px}
+@media (max-width:760px){ .shrink-grid{grid-template-columns:1fr} }
 @keyframes bundleFade{from{opacity:0}to{opacity:1}}
 .bundle-fade{animation:bundleFade .35s ease both}
 @media (prefers-reduced-motion: reduce){.bundle-fade{animation:none}}
@@ -200,6 +210,11 @@ body.present .panel h2{font-size:1.2rem}
       <span class="anim-hint">A side panel of 50 sample regression lines (spaghetti) — uses its own seed, never touches the histogram.</span>
     </div>
 
+    <div class="anim-row">
+      <label class="switch"><input type="checkbox" id="shrinkOn"><span class="track"></span>Show shrinkage demo</label>
+      <span class="anim-hint">A separate bias–variance trade-off panel (b̃₁ = c·b₁) with its own c, n, σ_ε and seed — independent of everything above.</span>
+    </div>
+
     <details class="advanced">
       <summary>Advanced options</summary>
       <div class="adv-body">
@@ -289,6 +304,46 @@ body.present .panel h2{font-size:1.2rem}
         <span class="it"><span class="ln" style="border-top-color:var(--truth)"></span>true line β₀+β₁·x</span>
       </div>
       <div class="bundle-note">Note: B is defined only by its <b>slope</b>, so the line's intercept is a display choice — each B line is drawn with slope b₁(subsample)+δ, rotated about its subsample mean (x̄<sub>m</sub>, ȳ<sub>m</sub>).</div>
+    </div>
+
+    <!-- (E) Shrinkage / bias–variance trade-off — optional sub-panel, §11 -->
+    <div class="panel full" id="panelShrink" style="display:none">
+      <h2><span class="tag">E · Shrinkage</span> Bias–variance trade-off: b̃₁ = c · b₁(OLS)</h2>
+      <div class="desc">An independent demo with its OWN parameters and seed. The shrinkage estimator just scales full-sample OLS by a constant c — a smaller variance bought with bias.</div>
+      <div class="shrink-ctrls">
+        <div class="ctrl"><label>Shrinkage <b>c</b> = <span class="val" id="shrinkCVal">1.000</span></label>
+          <input type="range" id="shrinkC" min="0" max="1.2" step="0.01" value="1"></div>
+        <div class="ctrl"><label>Sample size <b>n</b> = <span class="val" id="shrinkNVal">20</span></label>
+          <input type="range" id="shrinkN" min="10" max="200" step="1" value="20"></div>
+        <div class="ctrl"><label>Noise <b>σ<sub>ε</sub></b> = <span class="val" id="shrinkSigVal">3.000</span></label>
+          <input type="range" id="shrinkSig" min="0.2" max="5" step="0.1" value="3"></div>
+        <button id="shrinkResample">Resample</button>
+        <button id="shrinkVerifyBtn">Run verification (20,000)</button>
+      </div>
+      <div class="shrink-grid">
+        <div>
+          <svg id="svgShrinkCurve" viewBox="0 0 380 300" role="img" aria-label="MSE as a function of the shrinkage factor c"></svg>
+          <div class="legend">
+            <span class="it"><span class="ln" style="border-top-color:var(--accent)"></span>MSE(c) analytic</span>
+            <span class="it"><span class="ln" style="border-top-color:var(--truth);border-top-style:dashed"></span>MSE(OLS)</span>
+            <span class="it"><span class="ln" style="border-top-color:var(--estB)"></span>current c</span>
+            <span class="it"><span class="ln" style="border-top-color:#888;border-top-style:dashed"></span>oracle c*</span>
+            <span class="it"><span class="dot" style="border:2px solid var(--estB);border-radius:50%;width:9px;height:9px;display:inline-block"></span>empirical MSE</span>
+          </div>
+        </div>
+        <div class="shrink-side">
+          <svg id="svgShrinkHist" viewBox="0 0 380 180" role="img" aria-label="OLS vs shrinkage sampling distributions"></svg>
+          <svg id="svgShrinkMSE" viewBox="0 0 380 150" role="img" aria-label="Var plus Bias squared bars"></svg>
+        </div>
+      </div>
+      <div id="shrinkReadout" class="shrink-readout"></div>
+      <div class="oracle-note">c* uses the true β₁ (an oracle) — it only shows the trade-off EXISTS. Feasible shrinkage (ridge, James–Stein) estimates the shrinkage amount from data.</div>
+      <div class="desc" id="shrinkCaption"></div>
+      <table class="shrink-vtable">
+        <thead><tr><th>Quantity</th><th class="num">Empirical</th><th class="num">Theoretical</th><th class="num">Deviation</th><th>Pass?</th></tr></thead>
+        <tbody id="shrinkVerifyBody"><tr><td colspan="5" style="color:var(--muted)">Click “Run verification (20,000)”.</td></tr></tbody>
+      </table>
+      <div class="shrink-vsum" id="shrinkVerifySummary"></div>
     </div>
   </section>
 
@@ -460,6 +515,10 @@ const state = {
   geom: null,       // cached chart geometry for the falling-point overlay
   // ---- §7b regression-line bundle (separate panel, OWN prng) ----
   bundle: { on: false, rng: null, lines: null, xRange: null, yRange: null },
+  // ---- §11 shrinkage demo (separate panel, OWN params + OWN prng) ----
+  shrink: { on: false, c: 1.0, n: 20, sigma_eps: 3, rng: null,
+            olsList: null, shList: null,
+            varA: null, cstar: null, curveYmax: null, axisB: null, barCeil: null },
 };
 
 /* Effective engine params (rho fixed at 0). */
@@ -486,9 +545,10 @@ function dispLen(list){ return state.flight ? Math.max(0, list.length - 1) : lis
 function binOf(v){ const ax = state.axis, w = (ax.hi - ax.lo) / N_BINS; return clamp(Math.floor((v - ax.lo) / w), 0, N_BINS - 1); }
 function meanOf(list, len){ let s = 0; for (let i = 0; i < len; i++) s += list[i]; return len ? s / len : NaN; }
 
-function histCounts(list, len){
+function histCounts(list, len, ax){
   if (len == null) len = list.length;
-  const ax = state.axis, w = (ax.hi - ax.lo) / N_BINS;
+  ax = ax || state.axis;                 // defaults to the main axis (existing callers unchanged)
+  const w = (ax.hi - ax.lo) / N_BINS;
   const c = new Array(N_BINS).fill(0);
   for (let i = 0; i < len; i++){ const idx = clamp(Math.floor((list[i] - ax.lo) / w), 0, N_BINS - 1); c[idx]++; }
   return c;
@@ -972,6 +1032,216 @@ function refreshBundle(opts){
 }
 
 /* =====================================================================
+   §11 — SHRINKAGE DEMO (bias–variance trade-off) — a SEPARATE panel with its
+   OWN parameters (c, n, σ_ε) and its OWN PRNG (seed = baseSeed + 2). It never
+   touches the main 2×2-grid estimator B, the main draw stream, or the engine.
+   The shrinkage estimator is a pure scalar multiply of the CORE OLS:
+       b̃₁ = c · fitOLS(x, y).b1            (full-sample OLS of THIS panel)
+   Reference (verified): Var_A = σ_ε²/(σ_x²(n−3)) = thVarA;
+       E(b̃₁) = c·β₁ ; SD(b̃₁) = c·√Var_A ; MSE(c) = c²·Var_A + (1−c)²·β₁² ;
+       oracle c* = β₁² / (β₁² + Var_A).
+   ===================================================================== */
+const R_SHRINK_LIVE = 4000;   // sample count for the live histograms / empirical dot
+
+function shrinkParams(){
+  // fixed μ_x, σ_x, β₀, β₁ as everywhere; own n and σ_ε; δ/m irrelevant (m=n, δ=0)
+  return { n: state.shrink.n, m: state.shrink.n, mu_x: FIXED.mu_x, sigma_x: FIXED.sigma_x,
+           beta0: FIXED.beta0, beta1: FIXED.beta1, sigma_eps: state.shrink.sigma_eps, rho: 0, delta: 0 };
+}
+function shrinkReseed(){ state.shrink.rng = makeRNG((state.seed + 2) >>> 0); }   // derived, deterministic
+
+function shrinkComputeAxes(){
+  const p = shrinkParams();
+  const varA = thVarA(p), b1 = p.beta1;                 // reuse the CORE theory function
+  const mseAt = cc => cc * cc * varA + (1 - cc) * (1 - cc) * b1 * b1;
+  state.shrink.varA = varA;
+  state.shrink.cstar = (b1 * b1) / (b1 * b1 + varA);
+  // FIXED y-range of the MSE curve (max on [0,1.2] is at an endpoint of this convex parabola)
+  state.shrink.curveYmax = Math.max(mseAt(0), mseAt(1.2), varA) * 1.12;
+  // FIXED b₁ histogram axis covering OLS + shrinkage over c ∈ [0, 1.2]
+  const sdA = Math.sqrt(varA);
+  state.shrink.axisB = { lo: Math.min(0, b1) - 4 * sdA * 1.2, hi: Math.max(b1, 1.2 * b1) + 4 * sdA * 1.2 };
+  // FIXED MSE-bar ceiling
+  state.shrink.barCeil = Math.max(mseAt(0), varA, mseAt(1.2)) * 1.1;
+}
+
+function shrinkApplyC(){     // shrinkage is a scalar multiply — recompute from the SAME OLS draws
+  const ols = state.shrink.olsList;
+  if (!ols){ state.shrink.shList = null; return; }
+  const c = state.shrink.c, sh = new Float64Array(ols.length);
+  for (let i = 0; i < ols.length; i++) sh[i] = c * ols[i];
+  state.shrink.shList = sh;
+}
+function shrinkSampleOLS(){  // draw OLS b₁ from the panel's OWN prng, then apply c
+  const p = shrinkParams(), rng = state.shrink.rng, ols = new Float64Array(R_SHRINK_LIVE);
+  for (let i = 0; i < R_SHRINK_LIVE; i++){ const s = makeSample(p, rng); ols[i] = fitOLS(s.x, s.y).b1; }
+  state.shrink.olsList = ols; shrinkApplyC();
+}
+function shrinkEmpMSE(){
+  const sh = state.shrink.shList; if (!sh) return null;
+  const b1 = FIXED.beta1; let s = 0; for (let i = 0; i < sh.length; i++){ const d = sh[i] - b1; s += d * d; }
+  return s / sh.length;
+}
+
+/* ---- central chart: MSE(c) curve, fixed axes ---- */
+function drawShrinkCurve(){
+  const svg = $("svgShrinkCurve"); if (!svg) return; svg.innerHTML = "";
+  const W = 380, H = 300, m = { l: 54, r: 14, t: 16, b: 42 };
+  const cLo = 0, cHi = 1.2, yLo = 0, yHi = state.shrink.curveYmax;
+  const sx = linScale(cLo, cHi, m.l, W - m.r), sy = linScale(yLo, yHi, H - m.b, m.t);
+  const varA = state.shrink.varA, b1 = FIXED.beta1, cstar = state.shrink.cstar, c = clamp(state.shrink.c, cLo, cHi);
+  const mseAt = cc => cc * cc * varA + (1 - cc) * (1 - cc) * b1 * b1;
+
+  svg.appendChild(el("rect", { x: m.l, y: m.t, width: W - m.l - m.r, height: H - m.t - m.b, fill: "#fcfdff", stroke: "var(--line)" }));
+  svg.appendChild(el("line", { x1: m.l, y1: H - m.b, x2: W - m.r, y2: H - m.b, stroke: "#aab4bf" }));
+  svg.appendChild(el("line", { x1: m.l, y1: m.t, x2: m.l, y2: H - m.b, stroke: "#aab4bf" }));
+  for (let i = 0; i <= 4; i++){
+    const cv = cLo + (cHi - cLo) * i / 4;
+    svg.appendChild(el("line", { x1: sx(cv), y1: H - m.b, x2: sx(cv), y2: H - m.b + 4, stroke: "#aab4bf" }));
+    svg.appendChild(el("text", { x: sx(cv), y: H - m.b + 15, "text-anchor": "middle", "font-size": 10, fill: "var(--muted)" }, fmt3(cv)));
+    const yv = yLo + (yHi - yLo) * i / 4;
+    svg.appendChild(el("line", { x1: m.l - 4, y1: sy(yv), x2: m.l, y2: sy(yv), stroke: "#aab4bf" }));
+    svg.appendChild(el("text", { x: m.l - 6, y: sy(yv) + 3.5, "text-anchor": "end", "font-size": 10, fill: "var(--muted)" }, fmt3(yv)));
+  }
+  // MSE(OLS) horizontal reference
+  svg.appendChild(el("line", { x1: m.l, y1: sy(varA), x2: W - m.r, y2: sy(varA), stroke: "var(--truth)", "stroke-width": 1.6, "stroke-dasharray": "6 4" }));
+  svg.appendChild(el("text", { x: W - m.r - 3, y: sy(varA) - 4, "text-anchor": "end", "font-size": 10, "font-weight": 700, fill: "var(--truth)" }, "MSE(OLS)"));
+  // analytic MSE(c) curve
+  let d = "";
+  for (let i = 0; i <= 120; i++){ const cc = cLo + (cHi - cLo) * i / 120; d += (i ? "L" : "M") + sx(cc).toFixed(2) + "," + sy(Math.min(yHi, mseAt(cc))).toFixed(2) + " "; }
+  svg.appendChild(el("path", { d, fill: "none", stroke: "var(--accent)", "stroke-width": 2.5 }));
+  // oracle c* (vertical + min dot)
+  svg.appendChild(el("line", { x1: sx(cstar), y1: m.t, x2: sx(cstar), y2: H - m.b, stroke: "#888", "stroke-width": 1.6, "stroke-dasharray": "5 3" }));
+  svg.appendChild(el("text", { x: sx(cstar) + 3, y: m.t + 11, "font-size": 10, "font-weight": 700, fill: "#666" }, `c* = ${fmt3(cstar)}`));
+  svg.appendChild(el("circle", { cx: sx(cstar), cy: sy(mseAt(cstar)), r: 4, fill: "#666" }));
+  // current c (vertical + analytic point)
+  svg.appendChild(el("line", { x1: sx(c), y1: m.t, x2: sx(c), y2: H - m.b, stroke: "var(--estB)", "stroke-width": 2 }));
+  svg.appendChild(el("circle", { cx: sx(c), cy: sy(Math.min(yHi, mseAt(c))), r: 4, fill: "var(--estB)" }));
+  // empirical MSE dot at current c (hollow ring) — cross-check
+  const emp = shrinkEmpMSE();
+  if (emp != null) svg.appendChild(el("circle", { cx: sx(c), cy: sy(Math.min(yHi, emp)), r: 4, fill: "none", stroke: "var(--estB)", "stroke-width": 2 }));
+  svg.appendChild(el("text", { x: (m.l + W - m.r) / 2, y: H - 4, "text-anchor": "middle", "font-size": 11, fill: "var(--muted)" }, "shrinkage factor c"));
+  svg.appendChild(el("text", { x: 14, y: (m.t + H - m.b) / 2, "text-anchor": "middle", "font-size": 11, fill: "var(--muted)", transform: `rotate(-90 14 ${(m.t + H - m.b) / 2})` }, "MSE"));
+}
+
+/* ---- secondary: OLS vs shrinkage distributions (read-only, same style as the main hist) ---- */
+function drawShrinkHist(){
+  const svg = $("svgShrinkHist"); if (!svg) return; svg.innerHTML = "";
+  const W = 380, H = 180, m = { l: 34, r: 10, t: 16, b: 26 };
+  const ax = state.shrink.axisB, sx = linScale(ax.lo, ax.hi, m.l, W - m.r);
+  const plotH = H - m.t - m.b, pb = H - m.b, binW = (ax.hi - ax.lo) / N_BINS;
+  const ols = state.shrink.olsList || [], sh = state.shrink.shList || [];
+  const cO = histCounts(ols, ols.length, ax), cS = histCounts(sh, sh.length, ax);
+  const dO = cO.map(c => ols.length ? c / (ols.length * binW) : 0), dS = cS.map(c => sh.length ? c / (sh.length * binW) : 0);
+  const maxD = Math.max(1e-9, ...dO, ...dS), sy = v => pb - (v / maxD) * plotH;
+  svg.appendChild(el("rect", { x: m.l, y: m.t, width: W - m.l - m.r, height: plotH, fill: "#fcfdff", stroke: "var(--line)" }));
+  svg.appendChild(el("line", { x1: m.l, y1: pb, x2: W - m.r, y2: pb, stroke: "#aab4bf" }));
+  const bars = (dn, color) => { for (let i = 0; i < N_BINS; i++){ if (dn[i] <= 0) continue; const x0 = sx(ax.lo + i * binW), x1 = sx(ax.lo + (i + 1) * binW);
+    svg.appendChild(el("rect", { x: x0, y: sy(dn[i]), width: Math.max(1, x1 - x0), height: pb - sy(dn[i]), fill: color, "fill-opacity": .5, stroke: color, "stroke-opacity": .8, "stroke-width": .5 })); } };
+  bars(dO, "var(--estA)"); bars(dS, "var(--estB)");
+  for (let i = 0; i <= 3; i++){ const v = ax.lo + (ax.hi - ax.lo) * i / 3; svg.appendChild(el("text", { x: sx(v), y: pb + 13, "text-anchor": "middle", "font-size": 9.5, fill: "var(--muted)" }, fmt3(v))); }
+  const b1 = FIXED.beta1, c = state.shrink.c;
+  const vl = (xx, col, dash, lab, dy) => { const X = sx(clamp(xx, ax.lo, ax.hi));
+    svg.appendChild(el("line", { x1: X, y1: m.t, x2: X, y2: pb, stroke: col, "stroke-width": 1.8, "stroke-dasharray": dash ? "5 3" : "0" }));
+    svg.appendChild(el("text", { x: X, y: m.t + dy, "text-anchor": "middle", "font-size": 9, "font-weight": 700, fill: col }, lab)); };
+  vl(b1, "var(--truth)", true, "β₁", -3);
+  vl(c * b1, "var(--estB)", false, "E(b̃₁)", 9);
+  svg.appendChild(el("text", { x: (m.l + W - m.r) / 2, y: H - 3, "text-anchor": "middle", "font-size": 9.5, fill: "var(--muted)" }, "b₁  (blue = OLS, orange = shrinkage)"));
+}
+
+/* ---- secondary: Var + Bias² bars (read-only, same idea as the main MSE clock) ---- */
+function drawShrinkBars(){
+  const svg = $("svgShrinkMSE"); if (!svg) return; svg.innerHTML = "";
+  const W = 380, H = 150, m = { l: 34, r: 10, t: 18, b: 28 };
+  const ceil = state.shrink.barCeil, plotH = H - m.t - m.b, pb = H - m.b, sy = v => pb - (v / ceil) * plotH;
+  const varA = state.shrink.varA, b1 = FIXED.beta1, c = state.shrink.c;
+  const items = [{ lab: "OLS", varr: varA, bias2: 0, color: "var(--estA)" },
+                 { lab: "Shrinkage", varr: c * c * varA, bias2: (1 - c) * (1 - c) * b1 * b1, color: "var(--estB)" }];
+  const defs = el("defs", {});
+  const pat = el("pattern", { id: "shHatch", width: 5, height: 5, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" });
+  pat.appendChild(el("rect", { width: 5, height: 5, fill: "#aeb6bf" })); pat.appendChild(el("line", { x1: 0, y1: 0, x2: 0, y2: 5, stroke: "#6b7682", "stroke-width": 2 }));
+  defs.appendChild(pat); svg.appendChild(defs);
+  svg.appendChild(el("rect", { x: m.l, y: m.t, width: W - m.l - m.r, height: plotH, fill: "#fcfdff", stroke: "var(--line)" }));
+  svg.appendChild(el("line", { x1: m.l, y1: pb, x2: W - m.r, y2: pb, stroke: "#aab4bf" }));
+  const bw = 76, gap = (W - m.l - m.r - 2 * bw) / 3;
+  items.forEach((it, i) => {
+    const x = m.l + gap + (bw + gap) * i;
+    svg.appendChild(el("rect", { x, y: sy(it.varr), width: bw, height: pb - sy(it.varr), fill: it.color, "fill-opacity": .85 }));
+    if (it.bias2 > 0){ const yTop = sy(it.varr + it.bias2); svg.appendChild(el("rect", { x, y: yTop, width: bw, height: sy(it.varr) - yTop, fill: "url(#shHatch)" })); }
+    svg.appendChild(el("text", { x: x + bw / 2, y: pb + 13, "text-anchor": "middle", "font-size": 10, fill: "var(--muted)" }, it.lab));
+    svg.appendChild(el("text", { x: x + bw / 2, y: sy(it.varr + it.bias2) - 4, "text-anchor": "middle", "font-size": 9.5, "font-weight": 700, fill: "var(--ink)" }, fmt3(it.varr + it.bias2)));
+  });
+  svg.appendChild(el("text", { x: (m.l + W - m.r) / 2, y: 12, "text-anchor": "middle", "font-size": 10, fill: "var(--muted)" }, "MSE = Var + Bias² (hatched)"));
+}
+
+function updateShrinkCaption(){
+  const p = shrinkParams(), varA = thVarA(p), b1 = p.beta1, c = state.shrink.c, cstar = state.shrink.cstar;
+  const mseAt = cc => cc * cc * varA + (1 - cc) * (1 - cc) * b1 * b1;
+  const cap = $("shrinkCaption");
+  if (cap) cap.textContent = "Shrinking toward 0 (c<1) adds bias but cuts variance; over a range of c<1 this LOWERS MSE below OLS — but shrinking too far (c→0) raises it again.";
+  const ro = $("shrinkReadout");
+  if (ro) ro.innerHTML =
+    `Var<sub>A</sub> = MSE(OLS) = <b>${fmt3(varA)}</b> · current c = <b>${fmt3(c)}</b> ⇒ MSE = ` +
+    `<b style="color:var(--estB)">${fmt3(mseAt(c))}</b> · oracle c* = <b>${fmt3(cstar)}</b> ⇒ MSE(c*) = ` +
+    `<b>${fmt3(mseAt(cstar))}</b> (${fmt3((1 - mseAt(cstar) / varA) * 100)}% below OLS).`;
+}
+
+function drawShrinkAll(){ drawShrinkCurve(); drawShrinkHist(); drawShrinkBars(); updateShrinkCaption(); }
+
+// reseed (default) + recompute fixed axes; resample only if shown
+function refreshShrink(opts){
+  opts = opts || {};
+  if (opts.reseed || !state.shrink.rng) shrinkReseed();
+  shrinkComputeAxes();
+  if (state.shrink.on){ shrinkSampleOLS(); drawShrinkAll(); }
+  else { state.shrink.olsList = null; state.shrink.shList = null; updateShrinkCaption(); }
+}
+
+/* ---- the shrinkage panel's OWN verification (R = 20,000, own n/σ_ε/seed) ---- */
+function runShrinkVerification(){
+  $("shrinkVerifyBtn").disabled = true;
+  $("shrinkVerifySummary").textContent = "Running 20,000 reps…";
+  setTimeout(() => {
+    const p = shrinkParams(), R = 20000, c = state.shrink.c, b1 = p.beta1;
+    const rng = makeRNG((state.seed + 2) >>> 0);     // fresh derived seed → reproducible
+    const ols = new Float64Array(R), sh = new Float64Array(R);
+    for (let i = 0; i < R; i++){ const s = makeSample(p, rng); const b = fitOLS(s.x, s.y).b1; ols[i] = b; sh[i] = c * b; }
+    const mean = a => { let s = 0; for (let i = 0; i < a.length; i++) s += a[i]; return s / a.length; };
+    const sd = a => { const mu = mean(a); let s = 0; for (let i = 0; i < a.length; i++){ const d = a[i] - mu; s += d * d; } return Math.sqrt(s / (a.length - 1)); };
+    const mseOf = a => { let s = 0; for (let i = 0; i < a.length; i++){ const d = a[i] - b1; s += d * d; } return s / a.length; };
+    const varA = thVarA(p), sdA = Math.sqrt(varA);
+    const meanSh = mean(sh), sdSh = sd(sh), mseSh = mseOf(sh), seSh = sdSh / Math.sqrt(R);
+    const rows = [
+      ["Mean b̃₁", meanSh, c * b1, "c·β₁", 4 * seSh],
+      ["SD b̃₁", sdSh, c * sdA, "c·σ_ε/(σ_x·√(n−3))", 4 * seSh],
+      ["MSE b̃₁", mseSh, c * c * varA + (1 - c) * (1 - c) * b1 * b1, "c²·Var_A+(1−c)²·β₁²", 0],
+    ];
+    let allPass = true, html = "";
+    for (const [name, emp, th, thLabel, absTol] of rows){
+      const dAbs = Math.abs(emp - th);
+      const ok = (Math.abs(th) > 1e-9 && dAbs / Math.abs(th) <= 0.03) || dAbs <= absTol;
+      allPass = allPass && ok;
+      const devTxt = Math.abs(th) > 1e-3 ? (dAbs / Math.abs(th) * 100).toFixed(2) + "%" : "±" + fmt3(dAbs);
+      html += `<tr><td>${name}</td><td class="num">${fmt3(emp)}</td><td class="num">${fmt3(th)} <span style="color:var(--muted);font-size:.8em">${thLabel}</span></td>` +
+              `<td class="num">${devTxt}</td><td>${ok ? '<span class="pass">✓ Pass</span>' : '<span class="fail">✗ Fail</span>'}</td></tr>`;
+    }
+    // confirmation: at c = c*, MSE(shrinkage) < MSE(OLS)
+    const cstar = (b1 * b1) / (b1 * b1 + varA);
+    const shStar = new Float64Array(R); for (let i = 0; i < R; i++) shStar[i] = cstar * ols[i];
+    const mseStar = mseOf(shStar), mseOLS = mseOf(ols), better = mseStar < mseOLS;
+    allPass = allPass && better;
+    html += `<tr><td>At c = c* (${fmt3(cstar)}): MSE(shrink) &lt; MSE(OLS)</td>` +
+            `<td class="num">${fmt3(mseStar)}</td><td class="num">${fmt3(mseOLS)} <span style="color:var(--muted);font-size:.8em">MSE(OLS)</span></td>` +
+            `<td class="num">−${fmt3((1 - mseStar / mseOLS) * 100)}%</td><td>${better ? '<span class="pass">✓ Yes</span>' : '<span class="fail">✗ No</span>'}</td></tr>`;
+    $("shrinkVerifyBody").innerHTML = html;
+    $("shrinkVerifySummary").innerHTML = allPass
+      ? `<span class="pass">ALL PASS ✓</span> — c = ${fmt3(c)}, n = ${p.n}, σ_ε = ${fmt3(p.sigma_eps)} (R = 20,000).`
+      : `<span class="fail">SOME ROW FAILED ✗</span>.`;
+    $("shrinkVerifyBtn").disabled = false;
+  }, 30);
+}
+
+/* =====================================================================
    EVENT WIRING
    ===================================================================== */
 function syncLabels(){
@@ -1005,13 +1275,13 @@ $("verifyBtn").addEventListener("click", runVerification);
 $("seedInput").addEventListener("change", e => {
   const v = parseInt(e.target.value, 10);
   state.seed = Number.isFinite(v) ? (v >>> 0) : DEFAULT_SEED;
-  resetScenario(true); refreshBundle({ reseed: true });
+  resetScenario(true); refreshBundle({ reseed: true }); refreshShrink({ reseed: true });
 });
-$("seedDefault").addEventListener("click", () => { state.seed = DEFAULT_SEED; $("seedInput").value = DEFAULT_SEED; resetScenario(true); refreshBundle({ reseed: true }); });
+$("seedDefault").addEventListener("click", () => { state.seed = DEFAULT_SEED; $("seedInput").value = DEFAULT_SEED; resetScenario(true); refreshBundle({ reseed: true }); refreshShrink({ reseed: true }); });
 $("seedRandom").addEventListener("click", () => {
   const r = makeRNG(state.seed >>> 0); let s = 0;
   for (let i = 0; i < 5; i++) s = (s * 65599 + Math.floor(r.rand() * 4294967296)) >>> 0;
-  state.seed = s >>> 0; $("seedInput").value = state.seed; resetScenario(true); refreshBundle({ reseed: true });
+  state.seed = s >>> 0; $("seedInput").value = state.seed; resetScenario(true); refreshBundle({ reseed: true }); refreshShrink({ reseed: true });
 });
 
 /* ---- §7b regression-line bundle controls (independent of the histogram) ---- */
@@ -1029,6 +1299,37 @@ $("bundleResample").addEventListener("click", () => {
   bundleSampleLines();          // continue the bundle's own stream → a fresh set of lines
   drawBundle();
 });
+
+/* ---- §11 shrinkage controls (own params + own prng; independent of the main panel) ---- */
+$("shrinkOn").addEventListener("change", e => {
+  state.shrink.on = e.target.checked;
+  $("panelShrink").style.display = state.shrink.on ? "" : "none";
+  if (state.shrink.on){
+    if (!state.shrink.rng) shrinkReseed();
+    shrinkComputeAxes(); shrinkSampleOLS(); drawShrinkAll();
+  }
+  updateShrinkCaption();
+});
+$("shrinkC").addEventListener("input", e => {     // c only rescales the SAME OLS draws — no resample
+  state.shrink.c = parseFloat(e.target.value);
+  $("shrinkCVal").textContent = fmt3(state.shrink.c);
+  shrinkApplyC(); if (state.shrink.on) drawShrinkAll(); else updateShrinkCaption();
+});
+$("shrinkN").addEventListener("input", e => {
+  state.shrink.n = parseInt(e.target.value, 10);
+  $("shrinkNVal").textContent = state.shrink.n;
+  refreshShrink({ reseed: true });                // new n ⇒ fresh deterministic set
+});
+$("shrinkSig").addEventListener("input", e => {
+  state.shrink.sigma_eps = parseFloat(e.target.value);
+  $("shrinkSigVal").textContent = fmt3(state.shrink.sigma_eps);
+  refreshShrink({ reseed: true });
+});
+$("shrinkResample").addEventListener("click", () => {
+  if (!state.shrink.on) return;
+  shrinkSampleOLS(); drawShrinkAll();             // continue the panel's own stream → fresh draws
+});
+$("shrinkVerifyBtn").addEventListener("click", runShrinkVerification);
 $("presentMode").addEventListener("change", e => {
   document.body.classList.toggle("present", e.target.checked);
   drawHist(); drawMSE();
@@ -1057,7 +1358,7 @@ function initAnimUI(){
 /* =====================================================================
    STARTUP
    ===================================================================== */
-clampM(); syncLabels(); updateGrid(); initAnimUI(); resetScenario(true); refreshBundle({ reseed: true });
+clampM(); syncLabels(); updateGrid(); initAnimUI(); resetScenario(true); refreshBundle({ reseed: true }); refreshShrink({ reseed: true });
 </script>
 </body>
 </html>
