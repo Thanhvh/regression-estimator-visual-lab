@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Consistency — Collapse of the Sampling Distribution</title>
+<style>
+/* ===================================================================== */
+/* Palette mirrors Lesson 1/2 (Okabe–Ito, colorblind-friendly).          */
+/*  estimate distribution = green ; true β₁ = black ; wrong limit = orange */
+/* ===================================================================== */
+:root{
+  --eps:#0072B2; --resid:#E69F00; --truth:#111111; --estimate:#009E73; --estimate-dk:#006b4f;
+  --bg:#f7f8fa; --panel:#ffffff; --ink:#1d2733; --muted:#5b6876;
+  --line:#dde3ea; --accent:#0b5cad; --shadow:#b9c4d0;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{font-family:"Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink);line-height:1.45;-webkit-font-smoothing:antialiased;}
+.app{max-width:1180px;margin:0 auto;padding:18px 20px 60px}
+header.top{border-bottom:2px solid var(--line);padding-bottom:12px}
+header.top h1{font-size:1.4rem;margin:0;font-weight:700}
+header.top .sub{color:var(--muted);font-size:.9rem;margin-top:2px}
+
+button{font:inherit;font-weight:600;cursor:pointer;border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:9px;padding:8px 13px;transition:.12s;}
+button:hover{border-color:var(--shadow);background:#f2f6fb}
+button:active{transform:translateY(1px)}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button.primary:hover{background:#0a4f95}
+button:disabled{opacity:.5;cursor:not-allowed}
+
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-top:14px}
+.panel h2{font-size:1.02rem;margin:0 0 8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.panel .desc{color:var(--muted);font-size:.84rem;margin:-2px 0 10px}
+.tag{font-size:.7rem;font-weight:700;letter-spacing:.5px;padding:2px 8px;border-radius:20px;background:#eef3f8;color:var(--accent);text-transform:uppercase}
+
+/* case selector */
+.cases{display:flex;gap:8px;flex-wrap:wrap}
+.case-btn{display:flex;flex-direction:column;align-items:flex-start;gap:2px;min-width:160px;text-align:left}
+.case-btn .k{font-size:.74rem;color:var(--muted);font-weight:600}
+.case-btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.case-btn.active .k{color:#dbe8f6}
+
+/* n slider */
+.nrow{margin-top:14px}
+.nrow label{font-weight:700;font-size:.95rem}
+.nrow .nval{color:var(--accent);font-variant-numeric:tabular-nums;font-size:1.05rem}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.ticks{display:flex;justify-content:space-between;color:var(--muted);font-size:.72rem;font-variant-numeric:tabular-nums;margin-top:2px}
+.hint{color:var(--muted);font-size:.78rem}
+
+.knobs{display:flex;gap:22px;flex-wrap:wrap;align-items:end;margin-top:14px;border-top:1px dashed var(--line);padding-top:12px}
+.knob{min-width:170px}
+.knob label{display:block;font-weight:600;font-size:.88rem;margin-bottom:3px}
+.knob .val{color:var(--accent);font-variant-numeric:tabular-nums}
+.knob.hidden{display:none}
+.buttons{display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-top:14px;border-top:1px dashed var(--line);padding-top:12px}
+
+.advanced{margin-top:12px;border-top:1px dashed var(--line);padding-top:8px}
+.advanced summary{cursor:pointer;font-weight:600;font-size:.88rem;color:var(--muted)}
+.advanced .adv-body{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:9px}
+.advanced input[type=number]{font:inherit;padding:6px 8px;border:1px solid var(--line);border-radius:8px;width:120px}
+
+/* 2x2 grid */
+.grid2{display:grid;grid-template-columns:auto 1fr 1fr;grid-auto-rows:auto;gap:8px;max-width:680px;margin-top:6px}
+.grid2 .hd{font-weight:700;font-size:.82rem;text-align:center;padding:6px;color:var(--ink)}
+.grid2 .hd .s{font-weight:400;font-size:.82em;color:var(--muted)}
+.grid2 .rl{font-weight:700;font-size:.82rem;display:flex;align-items:center;justify-content:flex-end;padding-right:8px;text-align:right}
+.grid2 .cell{border:1px solid var(--line);border-radius:10px;min-height:62px;padding:8px;background:#fcfdff;display:flex;flex-direction:column;gap:3px;transition:.12s}
+.grid2 .cell.active{border-color:var(--accent);background:#eef5fc;box-shadow:0 0 0 2px rgba(11,92,173,.12)}
+.grid2 .cell .cid{font-weight:800}
+.grid2 .cell .cd{font-size:.76rem;color:var(--muted);line-height:1.25}
+.verdict{margin-top:12px;font-weight:600;background:#eef5fc;border-left:4px solid var(--accent);border-radius:8px;padding:9px 12px;font-size:.95rem}
+
+/* histogram */
+svg{display:block;width:100%;height:auto;overflow:hidden}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:.8rem;color:var(--muted);margin-top:8px}
+.legend .it{display:inline-flex;align-items:center;gap:6px}
+.legend .sw{width:18px;height:0;border-top-width:3px;border-top-style:solid;display:inline-block}
+.legend .bx{width:13px;height:11px;display:inline-block;border-radius:2px}
+.statbar{display:flex;gap:24px;flex-wrap:wrap;margin-top:8px;font-size:.95rem}
+.statbar b{font-variant-numeric:tabular-nums}
+.statbar .k{color:var(--muted);font-weight:600;margin-right:5px;font-size:.84rem}
+
+/* verification */
+table{border-collapse:collapse;width:100%;font-size:.95rem}
+th,td{text-align:left;padding:8px 11px;border-bottom:1px solid var(--line)}
+th{background:#f3f6fa;font-size:.8rem;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)}
+td.num{font-variant-numeric:tabular-nums;text-align:right}
+.pass{color:var(--estimate);font-weight:800}
+.fail{color:#c0392b;font-weight:800}
+.vsum{margin-top:10px;font-weight:700}
+.limitline{margin-top:6px;font-size:.92rem;color:var(--ink)}
+
+.messages{margin-top:14px;display:grid;gap:10px}
+.msg{padding:11px 15px;border-radius:11px;border-left:5px solid var(--accent);background:#eef5fc;font-size:.93rem}
+.msg.note{border-left-color:var(--truth);background:#f1f1f2}
+.msg.hook{border-left-color:var(--eps);background:#eaf3fb}
+.msg b{font-variant-numeric:tabular-nums}
+
+footer{margin-top:26px;color:var(--muted);font-size:.8rem;text-align:center;border-top:1px solid var(--line);padding-top:14px}
+@media (max-width:760px){ .grid2{grid-template-columns:auto 1fr 1fr} }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header class="top">
+    <h1>Consistency — collapse of the sampling distribution as n → ∞</h1>
+    <div class="sub" id="subtitle"></div>
+  </header>
+
+  <!-- ===================== CONTROLS ===================== -->
+  <section class="panel">
+    <h2><span class="tag">Controls</span> Pick an estimator, then drag n</h2>
+    <div class="cases" id="cases">
+      <button class="case-btn active" data-case="A"><span>A · OLS (exogenous)</span><span class="k">unbiased · consistent</span></button>
+      <button class="case-btn" data-case="B"><span>B · OLS (endogenous)</span><span class="k">biased · inconsistent</span></button>
+      <button class="case-btn" data-case="C"><span>C · OLS + c/n</span><span class="k">biased · consistent</span></button>
+      <button class="case-btn" data-case="D"><span>D · First k obs only</span><span class="k">unbiased · inconsistent</span></button>
+    </div>
+
+    <div class="nrow">
+      <label>Sample size <b>n</b> = <span class="nval" id="nVal">30</span>
+        <span class="hint">— log scale; drag to grow the sample. The b₁ axis stays fixed so you can see it collapse (or not).</span></label>
+      <input type="range" id="nSlider" min="1" max="4" step="0.001" value="1.4771">
+      <div class="ticks"><span>10</span><span>30</span><span>100</span><span>300</span><span>1000</span><span>3000</span><span>10000</span></div>
+    </div>
+
+    <div class="knobs">
+      <div class="knob hidden" id="knobRho"><label>Endogeneity <b>ρ</b> = <span class="val" id="rhoVal">0.500</span></label>
+        <input type="range" id="rho" min="0.1" max="0.8" step="0.05" value="0.5"></div>
+      <div class="knob hidden" id="knobC"><label>Bias constant <b>c</b> = <span class="val" id="cVal">5.000</span> <span class="hint">(bias = c/n)</span></label>
+        <input type="range" id="cKnob" min="0" max="10" step="0.5" value="5"></div>
+      <div class="knob hidden" id="knobK"><label>Fixed obs <b>k</b> = <span class="val" id="kVal">10</span> <span class="hint">(used regardless of n)</span></label>
+        <input type="range" id="kKnob" min="10" max="100" step="1" value="10"></div>
+      <div class="knob"><label>Noise <b>σ<sub>ε</sub></b> = <span class="val" id="sigVal">1.000</span></label>
+        <input type="range" id="sigEps" min="0.2" max="5" step="0.1" value="1"></div>
+    </div>
+
+    <div class="buttons">
+      <button class="primary" id="showBtn">Show distribution at this n</button>
+      <button id="moreBtn">Draw more</button>
+      <button id="resetBtn">Reset</button>
+      <button id="verifyBtn">Run verification (20,000)</button>
+    </div>
+
+    <details class="advanced">
+      <summary>Advanced options</summary>
+      <div class="adv-body">
+        <label>seed: <input type="number" id="seedInput" value="12345" step="1"></label>
+        <button id="seedDefault">Default seed</button>
+        <button id="seedRandom">Random seed</button>
+        <span class="hint">Same seed + same parameters ⇒ same result (reproducible).</span>
+      </div>
+    </details>
+  </section>
+
+  <!-- ===================== (A) BIAS × CONSISTENCY GRID ===================== -->
+  <section class="panel">
+    <h2><span class="tag">A · The two axes are independent</span> Bias (finite n) × Consistency (n→∞)</h2>
+    <div class="grid2" id="grid2">
+      <div class="hd"></div>
+      <div class="hd">Unbiased<br><span class="s">(mean = β₁ at this n)</span></div>
+      <div class="hd">Biased<br><span class="s">(mean ≠ β₁ at this n)</span></div>
+      <div class="rl">Consistent<br><span class="s" style="font-weight:400">(n→∞: →β₁)</span></div>
+      <div class="cell" id="cell_A"><span class="cid">A</span><span class="cd">OLS, exogenous</span></div>
+      <div class="cell" id="cell_C"><span class="cid">C</span><span class="cd">OLS + c/n</span></div>
+      <div class="rl">Inconsistent<br><span class="s" style="font-weight:400">(n→∞: ↛β₁)</span></div>
+      <div class="cell" id="cell_D"><span class="cid">D</span><span class="cd">first k obs</span></div>
+      <div class="cell" id="cell_B"><span class="cid">B</span><span class="cd">OLS, endogenous</span></div>
+    </div>
+    <div class="verdict" id="verdict"></div>
+  </section>
+
+  <!-- ===================== (B) CENTRAL HISTOGRAM ===================== -->
+  <section class="panel">
+    <h2><span class="tag">B · Sampling distribution</span> Histogram + analytic Normal curve (fixed b₁ axis)</h2>
+    <div class="desc">The smooth curve is the asymptotic Normal density N(mean, SD²); the histogram should hug it. At small n the histogram may have heavier tails than the curve.</div>
+    <svg id="svgHist" viewBox="0 0 720 360" role="img" aria-label="Sampling distribution of b₁ with Normal overlay"></svg>
+    <div class="legend">
+      <span class="it"><span class="bx" style="background:var(--estimate);opacity:.45"></span>histogram of b₁</span>
+      <span class="it"><span class="sw" style="border-top-color:var(--estimate-dk)"></span>Normal N(mean, SD²)</span>
+      <span class="it"><span class="sw" style="border-top-color:var(--truth);border-top-style:dashed"></span>true β₁</span>
+      <span class="it"><span class="sw" style="border-top-color:var(--estimate)"></span>mean b₁</span>
+      <span class="it" id="lgLimit" style="display:none"><span class="sw" style="border-top-color:var(--resid);border-top-style:dashed"></span>limit (n→∞)</span>
+      <span class="it"><span class="sw" style="border-top-color:var(--shadow);border-top-style:dotted"></span>width at n=10</span>
+    </div>
+    <div class="statbar">
+      <span><span class="k">n</span><b id="stN">30</b></span>
+      <span><span class="k">mean b₁ (theory)</span><b id="stMean" style="color:var(--estimate-dk)">—</b></span>
+      <span><span class="k">SD b₁ (theory)</span><b id="stSD">—</b></span>
+      <span><span class="k">MSE (theory)</span><b id="stMSE">—</b></span>
+      <span><span class="k">true β₁</span><b id="stBeta" style="color:var(--truth)">0.500</b></span>
+    </div>
+  </section>
+
+  <!-- ===================== (C) VERIFICATION ===================== -->
+  <section class="panel">
+    <h2><span class="tag">C · Verification (safety net)</span> Empirical vs theory at this n</h2>
+    <div class="desc">Runs R = 20,000 samples for the selected case at the current n (large n may take ~1–2 s). “Pass” threshold: relative deviation ≤ 3%.</div>
+    <table>
+      <thead><tr><th>Quantity</th><th class="num">Empirical</th><th class="num">Theoretical</th><th class="num">Deviation</th><th>Pass?</th></tr></thead>
+      <tbody id="verifyBody">
+        <tr><td>Mean b₁</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td>—</td></tr>
+        <tr><td>SD b₁</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td>—</td></tr>
+        <tr><td>MSE b₁</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td>—</td></tr>
+      </tbody>
+    </table>
+    <div class="limitline" id="limitLine"></div>
+    <div class="vsum" id="verifySummary"></div>
+  </section>
+
+  <!-- ===================== MESSAGES ===================== -->
+  <section class="messages">
+    <div class="msg" id="msgDyn"></div>
+    <div class="msg note" id="msgNote">🔒 Consistency says nothing about your finite n: a consistent estimator can still be poor at the sample size you actually have, and an inconsistent one may be tolerable if its asymptotic bias is small. Consistency is a promise about the <i>limit</i> — which is why Lessons 1–2 still matter.</div>
+    <div class="msg hook" id="msgHook">plim behaves well (Slutsky: plim of a function = function of the plim), unlike the expectation operator — which is why IV, GMM, MLE and dynamic-panel methods are justified by <b>consistency</b>, not unbiasedness. Cases B (endogeneity) and C (biased-but-consistent) are the gateway to IV / GMM later in the course.</div>
+  </section>
+
+  <footer>
+    Regression Estimator Visual Lab · Lesson 3 — Consistency · Self-contained, runs offline (file://). Numbers: 3 decimals, dot.
+    Core build (convergence funnel and MSE(n) curve come later).
+  </footer>
+</div>
+
+<script>
+"use strict";
+/* =====================================================================
+   TERMINOLOGY — symbols & labels (spec 1.1). ε = population error,
+   e = sample residual, β = parameter, b = estimate. Do NOT use u / swap ε,e.
+   ===================================================================== */
+const TERMINOLOGY = {
+  caseName: { A: "OLS (exogenous)", B: "OLS (endogenous)", C: "OLS + c/n", D: "First k obs only" },
+  verdict: {
+    A: "Case A — OLS (exogenous): <b>Unbiased</b> at finite n · <b>Consistent</b> (collapses to β₁).",
+    B: "Case B — OLS (endogenous): <b>Biased</b> at finite n · <b>Inconsistent</b> (collapses to β₁ + ρσ_ε/σ_x ≠ β₁).",
+    C: "Case C — OLS + c/n: <b>Biased</b> at finite n · <b>Consistent</b> (collapses to β₁).",
+    D: "Case D — First k obs only: <b>Unbiased</b> at finite n · <b>Inconsistent</b> (spread never shrinks).",
+  },
+};
+const fmt3 = v => (Number.isFinite(v) ? v.toFixed(3) : "—");
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+/* =====================================================================
+   RNG — seeded PRNG (mulberry32) + randn (Box–Muller). No Math.random().
+   COPIED VERBATIM from Lesson 1/2.
+   ===================================================================== */
+function makeRNG(seed){
+  let a = seed >>> 0;
+  function rand(){
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  }
+  function randn(){
+    let u1 = 0, u2 = 0;
+    while (u1 === 0) u1 = rand();
+    u2 = rand();
+    return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+  }
+  return { rand, randn };
+}
+
+/* =====================================================================
+   DGP — data-generating process (ρ branch). COPIED VERBATIM from Lesson 1.
+   εᵢ = ρ·((xᵢ−μ_x)/σ_x)·σ_ε + √(1−ρ²)·σ_ε·zᵢ ; yᵢ = β₀ + β₁·xᵢ + εᵢ.
+   ===================================================================== */
+function makeSample(p, rng){
+  const { n, mu_x, sigma_x, beta0, beta1, sigma_eps, rho } = p;
+  const x = new Float64Array(n), y = new Float64Array(n);
+  const c = Math.sqrt(1 - rho * rho);
+  for (let i = 0; i < n; i++){
+    const xi = mu_x + sigma_x * rng.randn();
+    const zi = rng.randn();
+    const ei = rho * ((xi - mu_x) / sigma_x) * sigma_eps + c * sigma_eps * zi;
+    x[i] = xi; y[i] = beta0 + beta1 * xi + ei;
+  }
+  return { x, y };
+}
+
+/* =====================================================================
+   OLS — simple regression. COPIED VERBATIM from Lesson 1.
+   ===================================================================== */
+function fitOLS(x, y){
+  const n = x.length;
+  let sx = 0, sy = 0;
+  for (let i = 0; i < n; i++){ sx += x[i]; sy += y[i]; }
+  const xbar = sx / n, ybar = sy / n;
+  let sxx = 0, sxy = 0;
+  for (let i = 0; i < n; i++){ const dx = x[i] - xbar; sxx += dx * dx; sxy += dx * (y[i] - ybar); }
+  const b1 = sxy / sxx;
+  return { b0: ybar - b1 * xbar, b1, xbar, ybar };
+}
+
+/* =====================================================================
+   ESTIMATORS (spec 3.2 / 10) — all four use the CORE fitOLS.
+   A: fitOLS(x,y).b1, ρ=0.   B: fitOLS(x,y).b1, ρ≥0.1.
+   C: fitOLS(x,y).b1 + c/n, ρ=0.   D: fitOLS(first k obs).b1, ρ=0 (only k generated).
+   ===================================================================== */
+function drawCase(caseId, p, rng){
+  if (caseId === "D"){                            // only k observations are generated
+    const s = makeSample({ ...p, n: p.k, rho: 0 }, rng);
+    return fitOLS(s.x, s.y).b1;
+  }
+  const rho = caseId === "B" ? p.rho : 0;
+  const s = makeSample({ ...p, rho }, rng);
+  let b1 = fitOLS(s.x, s.y).b1;
+  if (caseId === "C") b1 += p.c / p.n;
+  return b1;
+}
+/* Theoretical mean / SD / limit (spec 3.2). */
+function theory(caseId, p){
+  const { sigma_eps, sigma_x, beta1, rho, c, k, n } = p;
+  if (caseId === "A") return { mean: beta1, sd: sigma_eps / (sigma_x * Math.sqrt(n - 3)), limit: beta1 };
+  if (caseId === "B") return { mean: beta1 + rho * sigma_eps / sigma_x, sd: Math.sqrt(1 - rho * rho) * sigma_eps / (sigma_x * Math.sqrt(n - 3)), limit: beta1 + rho * sigma_eps / sigma_x };
+  if (caseId === "C") return { mean: beta1 + c / n, sd: sigma_eps / (sigma_x * Math.sqrt(n - 3)), limit: beta1 };
+  /* D */              return { mean: beta1, sd: sigma_eps / (sigma_x * Math.sqrt(k - 3)), limit: beta1 };
+}
+const theoryMSE = (caseId, p) => { const t = theory(caseId, p); const b = t.mean - p.beta1; return t.sd * t.sd + b * b; };
+
+/* =====================================================================
+   STATE. Fixed μ_x=5, σ_x=2, β₀=1, β₁=0.5 (no sliders, spec 3.1).
+   ===================================================================== */
+const FIXED = { mu_x: 5, sigma_x: 2, beta0: 1, beta1: 0.5 };
+const DEFAULT_SEED = 12345, N_MIN = 10, K_MIN = 10, N_MAX = 10000, N_BINS = 50;
+
+const state = {
+  caseId: "A", n: 30, rho: 0.5, c: 5, k: 10, sigma_eps: 1,
+  seed: DEFAULT_SEED, histRng: null, histList: [],
+  axis: null,   // { lo, hi, yCeil, SD0, center0, limit }
+};
+
+/* current params (k clamped to ≤ n). */
+function P(){
+  return { n: state.n, k: clamp(state.k, K_MIN, state.n),
+           mu_x: FIXED.mu_x, sigma_x: FIXED.sigma_x, beta0: FIXED.beta0, beta1: FIXED.beta1,
+           sigma_eps: state.sigma_eps, rho: state.rho, c: state.c };
+}
+
+/* =====================================================================
+   CHARTS — pure SVG.
+   ===================================================================== */
+const SVGNS = "http://www.w3.org/2000/svg";
+const el = (tag, attrs, text) => { const e = document.createElementNS(SVGNS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (text != null) e.textContent = text; return e; };
+const linScale = (d0, d1, r0, r1) => { const m = (r1 - r0) / (d1 - d0); return v => r0 + (v - d0) * m; };
+const normPDF = (x, mu, sd) => Math.exp(-0.5 * ((x - mu) / sd) ** 2) / (sd * Math.sqrt(2 * Math.PI));
+
+/* Fixed b₁ axis (spec 6.3) — independent of n; recomputed on case/ρ/c/k/σ_ε/seed. */
+function computeAxis(){
+  const p = P();
+  const t0 = theory(state.caseId, { ...p, n: N_MIN });   // widest width: at n_min (D: at k)
+  const SD0 = t0.sd, center0 = t0.mean;
+  const limit = theory(state.caseId, p).limit;
+  const b1 = FIXED.beta1;
+  const lo = Math.min(b1, center0, limit) - 4 * SD0;
+  const hi = Math.max(b1, center0, limit) + 4 * SD0;
+  const yCeil = 1.3 / (SD0 * Math.sqrt(2 * Math.PI));     // ≈1.3× the peak density at n_min
+  state.axis = { lo, hi, yCeil, SD0, center0, limit };
+}
+
+/* density-normalized histogram counts over the fixed axis */
+function histDensity(){
+  const ax = state.axis, list = state.histList, R = list.length;
+  const binW = (ax.hi - ax.lo) / N_BINS, dens = new Array(N_BINS).fill(0);
+  if (!R) return { dens, binW };
+  const cnt = new Array(N_BINS).fill(0);
+  for (const v of list){ const i = clamp(Math.floor((v - ax.lo) / binW), 0, N_BINS - 1); cnt[i]++; }
+  for (let i = 0; i < N_BINS; i++) dens[i] = cnt[i] / (R * binW);
+  return { dens, binW };
+}
+
+function render(){
+  const svg = document.getElementById("svgHist"); svg.innerHTML = "";
+  const W = 720, H = 360, m = { l: 52, r: 18, t: 18, b: 46 };
+  const ax = state.axis, p = P(), th = theory(state.caseId, p);
+  const sx = linScale(ax.lo, ax.hi, m.l, W - m.r);
+  const plotH = H - m.t - m.b, pb = H - m.b;
+  const sy = d => pb - clamp(d / ax.yCeil, 0, 1) * plotH;
+
+  svg.appendChild(el("rect", { x: m.l, y: m.t, width: W - m.l - m.r, height: plotH, fill: "#fcfdff", stroke: "var(--line)" }));
+  svg.appendChild(el("line", { x1: m.l, y1: pb, x2: W - m.r, y2: pb, stroke: "#aab4bf" }));
+
+  // histogram bars (empirical)
+  const { dens, binW } = histDensity();
+  for (let i = 0; i < N_BINS; i++){
+    if (dens[i] <= 0) continue;
+    const x0 = sx(ax.lo + i * binW), x1 = sx(ax.lo + (i + 1) * binW);
+    svg.appendChild(el("rect", { x: x0, y: sy(dens[i]), width: Math.max(1, x1 - x0 - 0.5), height: pb - sy(dens[i]),
+      fill: "var(--estimate)", "fill-opacity": .45, stroke: "var(--estimate)", "stroke-opacity": .55, "stroke-width": .5 }));
+  }
+
+  // faint Normal curve at n=n_min (starting width reference)
+  const curve = (mu, sd, stroke, width, dash, op) => {
+    let d = ""; const NP = 480;
+    for (let i = 0; i <= NP; i++){ const xx = ax.lo + (ax.hi - ax.lo) * i / NP; const yy = Math.min(normPDF(xx, mu, sd), ax.yCeil);
+      d += (i ? "L" : "M") + sx(xx).toFixed(2) + "," + sy(yy).toFixed(2) + " "; }
+    svg.appendChild(el("path", { d, fill: "none", stroke, "stroke-width": width, "stroke-dasharray": dash || "0", "stroke-opacity": op == null ? 1 : op }));
+  };
+  curve(ax.center0, ax.SD0, "var(--shadow)", 1.5, "2 3", .9);          // width at n_min
+  // analytic Normal curve at current n (per-pixel resolution; spike clamps to ceiling)
+  curve(th.mean, th.sd, "var(--estimate-dk)", 2.6);
+
+  // x ticks
+  for (let i = 0; i <= 8; i++){ const v = ax.lo + (ax.hi - ax.lo) * i / 8;
+    svg.appendChild(el("line", { x1: sx(v), y1: pb, x2: sx(v), y2: pb + 4, stroke: "#aab4bf" }));
+    svg.appendChild(el("text", { x: sx(v), y: pb + 16, "text-anchor": "middle", "font-size": 10.5, fill: "var(--muted)" }, fmt3(v))); }
+  svg.appendChild(el("text", { x: (m.l + W - m.r) / 2, y: H - 6, "text-anchor": "middle", "font-size": 11.5, fill: "var(--muted)" }, "estimate b₁"));
+
+  // vertical reference lines
+  const vline = (xv, color, dash, label, ty, anchor) => {
+    const X = sx(clamp(xv, ax.lo, ax.hi));
+    svg.appendChild(el("line", { x1: X, y1: m.t, x2: X, y2: pb, stroke: color, "stroke-width": 2.2, "stroke-dasharray": dash ? "6 4" : "0" }));
+    const tx = anchor === "end" ? X - 4 : anchor === "start" ? X + 4 : X;
+    svg.appendChild(el("text", { x: tx, y: ty, "text-anchor": anchor || "middle", "font-size": 11.5, "font-weight": 700, fill: color }, label));
+  };
+  vline(FIXED.beta1, "var(--truth)", true, `true β₁ = ${fmt3(FIXED.beta1)}`, m.t - 6, "start");
+  if (Math.abs(ax.limit - FIXED.beta1) > 1e-9)
+    vline(ax.limit, "var(--resid)", true, `limit = ${fmt3(ax.limit)}`, m.t - 6, "end");
+  vline(th.mean, "var(--estimate)", false, `mean b₁ = ${fmt3(th.mean)}`, m.t + 12, "middle");
+}
+
+/* =====================================================================
+   SAMPLING — live batch histogram (adaptive size; deterministic per redraw).
+   ===================================================================== */
+function rHistFor(p){          // keep total obs work bounded so large n stays responsive
+  const obs = state.caseId === "D" ? p.k : p.n;
+  return clamp(Math.round(4e6 / obs), 400, 2000);
+}
+function redrawHistogram(){
+  const p = P();
+  state.histRng = makeRNG(state.seed >>> 0);     // reseed → deterministic batch at this n
+  const R = rHistFor(p);
+  const list = new Array(R);
+  for (let i = 0; i < R; i++) list[i] = drawCase(state.caseId, p, state.histRng);
+  state.histList = list;
+  render();
+}
+function drawMore(){
+  const p = P(), R = rHistFor(p);
+  for (let i = 0; i < R; i++) state.histList.push(drawCase(state.caseId, p, state.histRng));
+  render();
+}
+
+/* =====================================================================
+   UI / orchestration.
+   ===================================================================== */
+const $ = id => document.getElementById(id);
+
+function nFromSlider(){ return clamp(Math.round(Math.pow(10, parseFloat($("nSlider").value))), N_MIN, N_MAX); }
+function sliderFromN(n){ return Math.log10(n); }
+
+function updateReadouts(){
+  const p = P(), th = theory(state.caseId, p), mse = theoryMSE(state.caseId, p);
+  $("stN").textContent = p.n; $("nVal").textContent = p.n;
+  $("stMean").textContent = fmt3(th.mean);
+  $("stSD").textContent = fmt3(th.sd);
+  $("stMSE").textContent = fmt3(mse);
+  $("stBeta").textContent = fmt3(FIXED.beta1);
+}
+
+function updateGrid(){
+  ["cell_A", "cell_B", "cell_C", "cell_D"].forEach(id => $(id).classList.remove("active"));
+  $("cell_" + state.caseId).classList.add("active");
+  $("verdict").innerHTML = TERMINOLOGY.verdict[state.caseId];
+  document.querySelectorAll(".case-btn").forEach(b => b.classList.toggle("active", b.dataset.case === state.caseId));
+}
+
+function updateMessages(){
+  const p = P(), th = theory(state.caseId, p);
+  let s = "";
+  if (state.caseId === "A") s = "Consistency means the whole sampling distribution collapses onto β₁ as n grows. Drag n up: the curve narrows and stays centered on β₁.";
+  else if (state.caseId === "B") s = `More data does NOT fix endogeneity: the distribution narrows but collapses onto the <b>wrong</b> value (β₁ + ρσ_ε/σ_x = <b>${fmt3(th.limit)}</b>).`;
+  else if (state.caseId === "C") s = `Biased at small n, but the bias (c/n = <b>${fmt3(p.c / p.n)}</b> now) vanishes as n grows — biased yet consistent. (Illustrative; real cases: small-sample IV/MLE bias, dynamic-panel bias ~1/T.)`;
+  else if (state.caseId === "D") s = `Using a fixed k = <b>${p.k}</b> observations: the center is right but the spread never shrinks as n grows — unbiased yet inconsistent.`;
+  $("msgDyn").innerHTML = s;
+}
+
+function showHideKnobs(){
+  $("knobRho").classList.toggle("hidden", state.caseId !== "B");
+  $("knobC").classList.toggle("hidden", state.caseId !== "C");
+  $("knobK").classList.toggle("hidden", state.caseId !== "D");
+  $("lgLimit").style.display = (state.caseId === "B") ? "inline-flex" : "none";
+}
+
+/* full rebuild: axis + readouts + grid + messages + histogram */
+function rebuildScenario(){
+  // keep k ≤ n
+  state.k = clamp(state.k, K_MIN, Math.max(K_MIN, state.n)); $("kKnob").value = state.k; $("kVal").textContent = state.k;
+  computeAxis(); showHideKnobs(); updateReadouts(); updateGrid(); updateMessages(); redrawHistogram();
+}
+/* light update on drag (curve + readouts only; histogram redraws on release) */
+function lightUpdate(){ updateReadouts(); updateMessages(); render(); }
+
+/* ---- verification (spec 8) ---- */
+function runVerification(){
+  $("verifyBtn").disabled = true;
+  $("verifySummary").textContent = "computing…";
+  $("limitLine").textContent = "";
+  setTimeout(() => {                                  // yield so "computing…" paints
+    const p = P(), R = 20000, b1 = FIXED.beta1;
+    const rng = makeRNG(state.seed >>> 0);
+    const arr = new Float64Array(R);
+    for (let r = 0; r < R; r++) arr[r] = drawCase(state.caseId, p, rng);
+    let s = 0; for (let i = 0; i < R; i++) s += arr[i]; const mean = s / R;
+    let v = 0, mseAcc = 0; for (let i = 0; i < R; i++){ v += (arr[i] - mean) ** 2; mseAcc += (arr[i] - b1) ** 2; }
+    const sd = Math.sqrt(v / R), mse = mseAcc / R;
+    const th = theory(state.caseId, p), thMSE = theoryMSE(state.caseId, p);
+    const seMean = sd / Math.sqrt(R);
+    const rows = [
+      ["Mean b₁", mean, th.mean, caseLabelMean(), 4 * seMean],
+      ["SD b₁", sd, th.sd, caseLabelSD(), 0],
+      ["MSE b₁", mse, thMSE, "Var + Bias²", 0],
+    ];
+    let allPass = true, html = "";
+    for (const [name, emp, t, lbl, absTol] of rows){
+      const dAbs = Math.abs(emp - t);
+      const ok = (Math.abs(t) > 1e-9 && dAbs / Math.abs(t) <= 0.03) || dAbs <= absTol;
+      allPass = allPass && ok;
+      const dev = Math.abs(t) > 1e-3 ? (dAbs / Math.abs(t) * 100).toFixed(2) + "%" : "±" + fmt3(dAbs);
+      html += `<tr><td>${name}</td><td class="num">${fmt3(emp)}</td><td class="num">${fmt3(t)} <span style="color:var(--muted);font-size:.8em">${lbl}</span></td>` +
+              `<td class="num">${dev}</td><td>${ok ? '<span class="pass">✓ Pass</span>' : '<span class="fail">✗ Fail</span>'}</td></tr>`;
+    }
+    $("verifyBody").innerHTML = html;
+    $("limitLine").innerHTML = "<b>As n → ∞:</b> " + asNLimitText();
+    $("verifySummary").innerHTML = allPass
+      ? `<span class="pass">ALL PASS ✓</span> — case ${state.caseId}, n = ${p.n}, σ_ε = ${fmt3(p.sigma_eps)} (R = 20,000).`
+      : `<span class="fail">SOME ROW FAILED ✗</span> — re-check the estimator / DGP formulas.`;
+    $("verifyBtn").disabled = false;
+  }, 30);
+}
+function caseLabelMean(){ return { A: "β₁", B: "β₁ + ρσ_ε/σ_x", C: "β₁ + c/n", D: "β₁" }[state.caseId]; }
+function caseLabelSD(){ return state.caseId === "D" ? "σ_ε/(σ_x·√(k−3))" : (state.caseId === "B" ? "√(1−ρ²)·σ_ε/(σ_x·√(n−3))" : "σ_ε/(σ_x·√(n−3))"); }
+function asNLimitText(){
+  const lim = theory(state.caseId, P()).limit;
+  if (state.caseId === "A" || state.caseId === "C") return `collapses to β₁ = ${fmt3(FIXED.beta1)} — <span class="pass">consistent</span>.`;
+  if (state.caseId === "B") return `collapses to ${fmt3(lim)} ≠ β₁ — <span class="fail">inconsistent</span> (more data won't fix endogeneity).`;
+  return `spread does not shrink (fixed k) — <span class="fail">inconsistent</span>.`;
+}
+
+/* =====================================================================
+   EVENT WIRING
+   ===================================================================== */
+function syncSubtitle(){
+  $("subtitle").textContent =
+    `DGP: y = β₀ + β₁·x + ε · μ_x = ${fmt3(FIXED.mu_x)}, σ_x = ${fmt3(FIXED.sigma_x)}, β₀ = ${fmt3(FIXED.beta0)}, β₁ = ${fmt3(FIXED.beta1)} (fixed). Four estimators of β₁ vs n.`;
+}
+
+document.querySelectorAll(".case-btn").forEach(btn => btn.addEventListener("click", () => {
+  state.caseId = btn.dataset.case; rebuildScenario();     // keep n; recompute everything else
+}));
+
+$("nSlider").addEventListener("input", () => { state.n = nFromSlider(); lightUpdate(); });   // drag → curve only
+$("nSlider").addEventListener("change", () => { state.n = nFromSlider(); rebuildScenario(); }); // release → histogram
+
+$("rho").addEventListener("input", e => { state.rho = parseFloat(e.target.value); $("rhoVal").textContent = fmt3(state.rho); computeAxis(); lightUpdate(); });
+$("rho").addEventListener("change", rebuildScenario);
+$("cKnob").addEventListener("input", e => { state.c = parseFloat(e.target.value); $("cVal").textContent = fmt3(state.c); computeAxis(); lightUpdate(); });
+$("cKnob").addEventListener("change", rebuildScenario);
+$("kKnob").addEventListener("input", e => { state.k = parseInt(e.target.value, 10); $("kVal").textContent = state.k; computeAxis(); lightUpdate(); });
+$("kKnob").addEventListener("change", rebuildScenario);
+$("sigEps").addEventListener("input", e => { state.sigma_eps = parseFloat(e.target.value); $("sigVal").textContent = fmt3(state.sigma_eps); computeAxis(); lightUpdate(); });
+$("sigEps").addEventListener("change", rebuildScenario);
+
+$("showBtn").addEventListener("click", redrawHistogram);
+$("moreBtn").addEventListener("click", drawMore);
+$("resetBtn").addEventListener("click", () => {
+  state.n = 30; $("nSlider").value = sliderFromN(30); rebuildScenario();
+});
+$("verifyBtn").addEventListener("click", runVerification);
+
+$("seedInput").addEventListener("change", e => { const v = parseInt(e.target.value, 10); state.seed = Number.isFinite(v) ? (v >>> 0) : DEFAULT_SEED; rebuildScenario(); });
+$("seedDefault").addEventListener("click", () => { state.seed = DEFAULT_SEED; $("seedInput").value = DEFAULT_SEED; rebuildScenario(); });
+$("seedRandom").addEventListener("click", () => {
+  const r = makeRNG(state.seed >>> 0); let s = 0;
+  for (let i = 0; i < 5; i++) s = (s * 65599 + Math.floor(r.rand() * 4294967296)) >>> 0;
+  state.seed = s >>> 0; $("seedInput").value = state.seed; rebuildScenario();
+});
+
+/* =====================================================================
+   STARTUP
+   ===================================================================== */
+syncSubtitle();
+$("nSlider").value = sliderFromN(30);
+rebuildScenario();
+</script>
+</body>
+</html>
