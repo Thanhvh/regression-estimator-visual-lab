@@ -158,6 +158,11 @@ footer{margin-top:26px;color:var(--muted);font-size:.8rem;text-align:center;bord
       <span class="hint">A highlight panel: 40 cumulative-estimate paths vs n (own seed) — the classic picture of consistency, showing the √n rate.</span>
     </div>
 
+    <div class="toggle-row">
+      <label class="switch"><input type="checkbox" id="mseOn"><span class="track"></span>Show MSE(n) curve</label>
+      <span class="hint">A highlight panel: analytic MSE = Var + Bias² vs n on a log axis — the Lesson 2 bridge. Consistency ⇔ MSE(n) → 0.</span>
+    </div>
+
     <details class="advanced">
       <summary>Advanced options</summary>
       <div class="adv-body">
@@ -218,6 +223,22 @@ footer{margin-top:26px;color:var(--muted);font-size:.8rem;text-align:center;bord
       <span class="it"><span class="bx" style="background:var(--estimate);opacity:.2"></span>±2·SE(n) band</span>
       <span class="it"><span class="sw" style="border-top-color:var(--truth)"></span>true β₁</span>
       <span class="it" id="lgFunnelLimit" style="display:none"><span class="sw" style="border-top-color:var(--resid);border-top-style:dashed"></span>limit (n→∞)</span>
+    </div>
+  </section>
+
+  <!-- ===================== (E) MSE(n) CURVE (§7b, optional) ===================== -->
+  <section class="panel" id="panelMSE" style="display:none">
+    <h2><span class="tag">E · MSE(n) curve</span> MSE = Var + Bias² vs n (analytic — Lesson 2 bridge)
+      <a class="mini" href="02_efficiency_mse.html" style="margin-left:auto;text-decoration:none;display:inline-block;border:1px solid var(--line);border-radius:9px;color:var(--ink)">Lesson 2 ↗</a></h2>
+    <div class="desc" id="mseCaption"></div>
+    <svg id="svgMSEn" viewBox="0 0 760 340" role="img" aria-label="MSE, Var and Bias squared versus n on a log scale"></svg>
+    <div class="legend">
+      <span class="it"><span class="sw" style="border-top-color:var(--estimate-dk);border-top-width:4px"></span>MSE(n)</span>
+      <span class="it"><span class="sw" style="border-top-color:var(--eps)"></span>Var(n)</span>
+      <span class="it"><span class="sw" style="border-top-color:var(--resid)"></span>Bias²(n)</span>
+      <span class="it"><span class="sw" style="border-top-color:#888;border-top-style:dashed"></span>MSE floor</span>
+      <span class="it"><span class="dot" style="border:2px solid var(--estimate-dk);border-radius:50%;width:9px;height:9px;display:inline-block"></span>empirical MSE at n</span>
+      <span class="it"><span class="sw" style="border-top-color:var(--accent);border-top-style:dashed"></span>current n</span>
     </div>
   </section>
 
@@ -358,6 +379,8 @@ const state = {
   axis: null,   // { lo, hi, SD0, center0, limit } — shared fixed b₁ axis
   // ---- §7 convergence funnel (separate panel, OWN prng = baseSeed+3) ----
   funnel: { on: false, rng: null, lines: null, nGrid: null },
+  // ---- §7b MSE(n) curve (separate panel; analytic, no sim/prng) ----
+  mse: { on: false },
 };
 
 /* current params (k clamped to ≤ n). */
@@ -518,6 +541,7 @@ function rebuildScenario(){
   // keep k ≤ n
   state.k = clamp(state.k, K_MIN, Math.max(K_MIN, state.n)); $("kKnob").value = state.k; $("kVal").textContent = state.k;
   computeAxis(); showHideKnobs(); updateReadouts(); updateGrid(); updateMessages(); redrawHistogram();
+  if (state.mse.on) drawMSEPanel();        // §7b updates with case/ρ/c/k/σ_ε/n/seed (after batch refresh)
 }
 /* light update on drag (curve + readouts only; histogram redraws on release) */
 function lightUpdate(){ updateReadouts(); updateMessages(); render(); }
@@ -679,6 +703,82 @@ function funnelRefresh(opts){
 }
 
 /* =====================================================================
+   §7b — MSE(n) CURVE (Lesson 2 bridge). ANALYTIC from the core theory() —
+   no simulation, no PRNG. Decomposition MSE(n) = Var(n) + Bias(n)². LOG y-axis
+   (MSE spans >3 decades). Floor lines for B/D; an empirical-MSE cross-check dot
+   read from the core histogram batch; a current-n marker. Engine / four cases /
+   verification untouched.
+   ===================================================================== */
+function empMSEnow(){      // empirical MSE of the core's current-n batch (cross-check)
+  const list = state.histList; if (!list || !list.length) return null;
+  let s = 0; for (const b of list){ const d = b - FIXED.beta1; s += d * d; } return s / list.length;
+}
+function updateMSECaption(){
+  const p = P(), c = state.caseId;
+  const floorB = (p.rho * p.sigma_eps / p.sigma_x) ** 2, floorD = p.sigma_eps ** 2 / (p.sigma_x ** 2 * (p.k - 3));
+  const base = "Consistency ⇔ MSE(n) → 0 (within finite-variance estimators). A, C: MSE → 0. " +
+               "B: Var → 0 but Bias² stuck at a floor. D: Bias = 0 but Var stuck at a floor. The two ways of being inconsistent.";
+  let dyn = "";
+  if (c === "A") dyn = " Here, case A: MSE → 0.";
+  else if (c === "B") dyn = ` Here, case B: MSE → floor (ρσ_ε/σ_x)² = ${fmt3(floorB)}.`;
+  else if (c === "C") dyn = " Here, case C: MSE → 0 (both the c/n bias and the variance vanish).";
+  else dyn = ` Here, case D: MSE → floor σ_ε²/(σ_x²(k−3)) = ${fmt3(floorD)}.`;
+  const e = $("mseCaption"); if (e) e.textContent = base + dyn;
+}
+function drawMSEPanel(){
+  const svg = $("svgMSEn"); if (!svg) return; svg.innerHTML = "";
+  const W = 760, H = 340, m = { l: 64, r: 18, t: 24, b: 46 };
+  const grid = funnelGrid(), p = P(), b1 = FIXED.beta1, caseId = state.caseId;
+  // closed-form curves at each grid n (reuse core theory(), read-only)
+  const V = [], B2 = [], M = [];
+  for (const n of grid){ const t = theory(caseId, { ...p, n }); const v = t.sd * t.sd, bb = (t.mean - b1) ** 2; V.push(v); B2.push(bb); M.push(v + bb); }
+  // LOG y-domain (per case): contain Var and MSE across n, pad, ensure ≥3 decades
+  const cand = []; for (let i = 0; i < grid.length; i++){ cand.push(V[i]); cand.push(M[i]); }
+  let b2max = 0; for (const x of B2) if (x > b2max) b2max = x; if (b2max > 0) cand.push(b2max);
+  const pos = cand.filter(x => x > 0);
+  let ymax = Math.max(...pos) * 1.8, ymin = Math.min(...pos) * 0.4;
+  if (Math.log10(ymax / ymin) < 3){ const mid = Math.sqrt(ymax * ymin); ymax = mid * 31.62; ymin = mid / 31.62; }
+  const sx = linScale(1, 4, m.l, W - m.r), X = n => sx(Math.log10(n));
+  const syR = linScale(Math.log10(ymin), Math.log10(ymax), H - m.b, m.t), sy = v => syR(Math.log10(v));
+
+  svg.appendChild(el("rect", { x: m.l, y: m.t, width: W - m.l - m.r, height: H - m.t - m.b, fill: "#fcfdff", stroke: "var(--line)" }));
+  // log-decade gridlines + y labels
+  const fmtY = v => v >= 0.001 ? v.toFixed(3) : v.toExponential(0);
+  for (let e = Math.ceil(Math.log10(ymin)); e <= Math.floor(Math.log10(ymax)); e++){ const v = Math.pow(10, e);
+    svg.appendChild(el("line", { x1: m.l, y1: sy(v), x2: W - m.r, y2: sy(v), stroke: "#eef1f5" }));
+    svg.appendChild(el("line", { x1: m.l - 4, y1: sy(v), x2: m.l, y2: sy(v), stroke: "#aab4bf" }));
+    svg.appendChild(el("text", { x: m.l - 6, y: sy(v) + 3.5, "text-anchor": "end", "font-size": 9.5, fill: "var(--muted)" }, fmtY(v))); }
+  svg.appendChild(el("line", { x1: m.l, y1: H - m.b, x2: W - m.r, y2: H - m.b, stroke: "#aab4bf" }));
+  svg.appendChild(el("line", { x1: m.l, y1: m.t, x2: m.l, y2: H - m.b, stroke: "#aab4bf" }));
+  [10, 30, 100, 300, 1000, 3000, 10000].forEach(n => {
+    svg.appendChild(el("line", { x1: X(n), y1: H - m.b, x2: X(n), y2: H - m.b + 4, stroke: "#aab4bf" }));
+    svg.appendChild(el("text", { x: X(n), y: H - m.b + 15, "text-anchor": "middle", "font-size": 10, fill: "var(--muted)" }, String(n))); });
+  svg.appendChild(el("text", { x: (m.l + W - m.r) / 2, y: H - 5, "text-anchor": "middle", "font-size": 11, fill: "var(--muted)" }, "sample size n (log scale)"));
+  svg.appendChild(el("text", { x: 15, y: (m.t + H - m.b) / 2, "text-anchor": "middle", "font-size": 11, fill: "var(--muted)", transform: `rotate(-90 15 ${(m.t + H - m.b) / 2})` }, "MSE / Var / Bias²  (log scale)"));
+
+  const defs = el("defs", {}); const cp = el("clipPath", { id: "mseClip" });
+  cp.appendChild(el("rect", { x: m.l, y: m.t, width: W - m.l - m.r, height: H - m.t - m.b })); defs.appendChild(cp); svg.appendChild(defs);
+  const g = el("g", { "clip-path": "url(#mseClip)" }); svg.appendChild(g);
+  const curve = (arr, color, width) => { let d = "";
+    for (let i = 0; i < grid.length; i++){ const v = arr[i]; if (!(v > 0)) continue; d += (d ? "L" : "M") + X(grid[i]).toFixed(2) + "," + sy(v).toFixed(2) + " "; }
+    if (d) g.appendChild(el("path", { d, fill: "none", stroke: color, "stroke-width": width })); };
+  // floor line (dashed) — B: Bias² floor ; D: Var floor (the MSE asymptote)
+  if (caseId === "B"){ const fl = (p.rho * p.sigma_eps / p.sigma_x) ** 2; g.appendChild(el("line", { x1: m.l, y1: sy(fl), x2: W - m.r, y2: sy(fl), stroke: "#888", "stroke-width": 1.4, "stroke-dasharray": "5 4" })); }
+  if (caseId === "D"){ const fl = p.sigma_eps ** 2 / (p.sigma_x ** 2 * (p.k - 3)); g.appendChild(el("line", { x1: m.l, y1: sy(fl), x2: W - m.r, y2: sy(fl), stroke: "#888", "stroke-width": 1.4, "stroke-dasharray": "5 4" })); }
+  // decomposition: Var (blue), Bias² (orange, only if > 0), MSE (green, bold) on top
+  curve(V, "var(--eps)", 2);
+  if (b2max > 0) curve(B2, "var(--resid)", 2);
+  curve(M, "var(--estimate-dk)", 3);
+  // current-n marker + empirical-MSE cross-check dot (from the core batch)
+  const xc = X(state.n);
+  g.appendChild(el("line", { x1: xc, y1: m.t, x2: xc, y2: H - m.b, stroke: "var(--accent)", "stroke-width": 1.5, "stroke-dasharray": "4 3", "stroke-opacity": .7 }));
+  const emp = empMSEnow();
+  if (emp != null && emp > 0) g.appendChild(el("circle", { cx: xc, cy: sy(clamp(emp, ymin, ymax)), r: 4.5, fill: "none", stroke: "var(--estimate-dk)", "stroke-width": 2 }));
+  svg.appendChild(el("text", { x: clamp(xc, m.l + 16, W - m.r - 16), y: m.t - 4, "text-anchor": "middle", "font-size": 10.5, "font-weight": 700, fill: "var(--accent)" }, `n = ${state.n}`));
+  updateMSECaption();
+}
+
+/* =====================================================================
    EVENT WIRING
    ===================================================================== */
 function syncSubtitle(){
@@ -706,8 +806,8 @@ $("kKnob").addEventListener("change", rebuildAndFunnel);
 $("sigEps").addEventListener("input", e => { state.sigma_eps = parseFloat(e.target.value); $("sigVal").textContent = fmt3(state.sigma_eps); computeAxis(); lightUpdate(); });
 $("sigEps").addEventListener("change", rebuildAndFunnel);
 
-$("showBtn").addEventListener("click", redrawHistogram);
-$("moreBtn").addEventListener("click", drawMore);
+$("showBtn").addEventListener("click", () => { redrawHistogram(); if (state.mse.on) drawMSEPanel(); });
+$("moreBtn").addEventListener("click", () => { drawMore(); if (state.mse.on) drawMSEPanel(); });
 $("resetBtn").addEventListener("click", () => {
   state.n = 30; $("nSlider").value = sliderFromN(30); rebuildScenario();
 });
@@ -731,6 +831,13 @@ $("funnelOn").addEventListener("change", e => {
 $("funnelResample").addEventListener("click", () => {
   if (!state.funnel.on) return;
   funnelSample(); drawFunnel();        // continue the funnel's own stream → fresh paths
+});
+
+/* ---- §7b MSE(n) curve toggle (analytic; reads the core batch for the dot) ---- */
+$("mseOn").addEventListener("change", e => {
+  state.mse.on = e.target.checked;
+  $("panelMSE").style.display = state.mse.on ? "" : "none";
+  if (state.mse.on) drawMSEPanel();
 });
 
 /* =====================================================================
